@@ -1,0 +1,146 @@
+# pchisel-app.gndctrl
+# gndctrl project document — pchisel-app (the orchestration platform)
+# gndctrl_spec: "0.1.0" | airspace: CHI | Updated: 2026-03-24
+# READ THIS during pre-flight before touching any code.
+
+airspace: CHI
+version: "0.1.0"
+master_ref: "chisel.master.gndctrl"
+
+meta:
+  project: pchisel-app
+  description: "pChisel platform orchestration dashboard. Creates and manages project containers."
+  language: python
+  framework: fastapi
+  database: "sqlite (/data/chisel.db)"
+  container: "pchisel-app (runs at pchisel.com)"
+
+architecture:
+  overview: |
+    FastAPI backend serving a vanilla JS/HTML frontend.
+    Backend talks to Docker socket to spawn project containers (chisel-{name}).
+    Caddy handles TLS termination and subdomain routing for spawned containers.
+    Auth is session-cookie based (chisel_session, SameSite=lax, domain=.pchisel.com);
+    tokens validated via middleware on all /api/ routes except /api/auth/*.
+  entry_points:
+    - backend/main.py          # FastAPI app, mounts all routers, auth middleware
+    - frontend/dashboard.html  # Main UI
+    - Dockerfile               # pchisel-app image (python:3.12-slim + backend/frontend)
+
+# ── Zone Registry ────────────────────────────────────────────────────────────
+# Zones defined by file path patterns. Inline @gndctrl:zone markers used only
+# where a single file spans multiple zones (projects.py).
+
+zones:
+  AUTH_CORE:
+    stability: sensitive
+    type: [code]
+    minimum_agent_class: heavy
+    deps: []
+    paths:
+      - "backend/routes/auth.py"
+    description: "User authentication, session tokens, role management, admin seeding, Google OAuth, Request Access flow"
+    gotchas:
+      - "seed_admin() runs on every startup — idempotent by design. Do not add non-idempotent logic. See logbook CHI-AUTH-20260324-001."
+      - "Session tokens stored in chisel_session cookie (HttpOnly, SameSite=lax). Revocation deletes the DB row."
+      - "Google OAuth does NOT create new users — redirects with auth_error=not_authorized if no matching user exists."
+    decisions:
+      - "Session cache in chisel-base uses 5-minute TTL (300s) — intentional to avoid DB hit on every chat request."
+
+  PROJECT_MGMT:
+    stability: stable
+    type: [code]
+    minimum_agent_class: medium
+    deps: [AUTH_CORE, CONTAINER_ORCHESTRATION, KEY_STORE]
+    paths:
+      - "backend/routes/projects.py"
+    description: "Project CRUD, container start/stop/delete, readiness probe, file upload, ownership validation"
+
+  CONTAINER_ORCHESTRATION:
+    stability: sensitive
+    type: [code]
+    minimum_agent_class: heavy
+    deps: [AUTH_CORE]
+    paths:
+      - "backend/routes/projects.py"
+    description: "Docker API calls — container creation, network attachment, port assignment, resource limits"
+    note: "Shares projects.py with PROJECT_MGMT. Inline @gndctrl:zone markers delineate the boundary."
+    gotchas:
+      - "shm_size='256m' is NOT optional. Node.js/Vite crashes with Bus error at lower values. See logbook CHI-CONT-20260324-002."
+      - "Must connect to BOTH 'web' and 'bridge' networks. See logbook CHI-CONT-20260324-001."
+      - "memswap_limit must equal mem_limit — prevents containers from using host swap."
+      - "Ports 3100–3999 reserved for project containers. Do not assign other services in this range."
+    decisions:
+      - "docker-py SDK over subprocess docker CLI — type safety and structured error handling."
+      - "restart_policy='unless-stopped' — containers survive host reboots without manual intervention."
+
+  KEY_STORE:
+    stability: sensitive
+    type: [code]
+    minimum_agent_class: heavy
+    deps: [AUTH_CORE]
+    paths:
+      - "backend/routes/keys.py"
+    description: "API key provider registry and storage. Keys injected as env vars into containers at creation time."
+    gotchas:
+      - "Keys stored in plaintext SQLite at /data/chisel.db. Anyone with /data/ access can read all keys."
+      - "Keys masked in API responses (last 4 chars only). Full value never re-exposed after storage."
+      - "ANTHROPIC_API_KEY always injected from host env regardless of key_ids selection at project creation."
+
+  ROUTING:
+    stability: stable
+    type: [code]
+    minimum_agent_class: medium
+    deps: [AUTH_CORE]
+    paths:
+      - "backend/main.py"
+    description: "FastAPI app setup, auth middleware, static file serving, cache-busting, TLS verify endpoint for Caddy"
+
+  GNDCTRL_API:
+    stability: active
+    type: [code]
+    minimum_agent_class: medium
+    deps: [AUTH_CORE]
+    paths:
+      - "backend/routes/pchisel.py"
+    description: "Serves master gndctrl document at GET /api/pchisel/master. Phase 2 adds audit endpoint. Phase 3 adds write endpoint."
+
+# ── Decision Log ─────────────────────────────────────────────────────────────
+
+decision_log:
+  - record_id: CHI-RATIONALE-001
+    date: "2026-02-27"
+    zones_affected: [CHI://ROUTING]
+    summary: "SQLite over Postgres"
+    decision: "Use SQLite for all persistent storage"
+    rationale: "Single-host deployment, no horizontal scaling requirement. Simplifies backup and removes a service dependency."
+    alternatives_considered:
+      - "Postgres — rejected, adds service complexity and ops overhead for no gain at this scale"
+
+  - record_id: CHI-RATIONALE-002
+    date: "2026-02-27"
+    zones_affected: [CHI://ROUTING]
+    summary: "Wildcard TLS via Caddy on-demand"
+    decision: "Caddy on-demand TLS with /api/tls-verify callback for *.pchisel.com subdomains"
+    rationale: "Projects get subdomains automatically without pre-provisioning TLS per project."
+    alternatives_considered:
+      - "Let's Encrypt wildcard cert — rejected, requires DNS challenge and manual renewal"
+
+  - record_id: CHI-RATIONALE-003
+    date: "2026-03-02"
+    zones_affected: [CHI://CONTAINER_ORCHESTRATION]
+    summary: "Per-template resource limits"
+    decision: "TEMPLATE_RESOURCES dict maps template name to RAM + CPU limits applied at container creation"
+    rationale: "Upload and backend templates need more RAM for npm install / Python deps. Dashboard can run on 1g."
+    alternatives_considered:
+      - "Single global limit — rejected, too restrictive for heavy templates, too permissive for light ones"
+
+# ── Known Solutions ───────────────────────────────────────────────────────────
+
+known_solutions: []
+
+# ── Open Questions ────────────────────────────────────────────────────────────
+
+open_questions:
+  - "Should KEY_STORE encrypt keys at rest? Current: plaintext SQLite. Risk: /data/ volume access exposes all keys."
+  - "No key rotation — once stored, a key must be deleted and re-added to update."

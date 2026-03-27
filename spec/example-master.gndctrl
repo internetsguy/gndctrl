@@ -1,0 +1,163 @@
+# chisel.master.gndctrl
+# Tier 1 — Platform-wide master control document
+# gndctrl_spec: "0.1.0" | Updated: 2026-03-24
+# READ ONLY for project-level agents. Never modified by container agents.
+# Served at: GET http://pchisel-app:8000/api/pchisel/master
+
+meta:
+  platform: pChisel
+  gndctrl_version: "0.1.0"
+  last_updated: "2026-03-24"
+
+# ── Stability Tiers ───────────────────────────────────────────────────────────
+
+stability_tiers:
+  - tier: 5
+    label: locked
+    aviation: "Prohibited airspace"
+    agent_behavior: "Surface proposed change as diff only. Do not implement. Wait for human confirmation."
+  - tier: 4
+    label: sensitive
+    aviation: "Restricted airspace"
+    agent_behavior: "Read full zone doc + all dep zone docs. Surface risk summary before acting."
+  - tier: 3
+    label: stable
+    aviation: "Approach controlled (Class C/D)"
+    agent_behavior: "Read zone doc before structural changes. Flag cross-zone edits to user."
+  - tier: 2
+    label: active
+    aviation: "Controlled (Class E)"
+    agent_behavior: "Verify deps not broken. No cross-zone restrictions."
+  - tier: 1
+    label: experimental
+    aviation: "Uncontrolled (Class G)"
+    agent_behavior: "Act freely. No checks required."
+  - tier: 0
+    label: deprecated
+    aviation: "Decommissioned airspace"
+    agent_behavior: "Refuse new dependencies. Suggest migration path."
+
+# ── Agent Weight Classes ──────────────────────────────────────────────────────
+# Weight class is a minimum floor — heavier agents may always enter lighter zones.
+
+weight_classes:
+  - class: super
+    aviation: "A380 / An-225"
+    description: "Frontier reasoning models. Reserved for locked zones and critical architectural decisions."
+    providers: [claude-opus]
+  - class: heavy
+    aviation: "747 / 777"
+    description: "Large capable models. Standard for sensitive zones, complex planning, security review."
+    providers: [claude-sonnet]
+  - class: medium
+    aviation: "737 / A320"
+    description: "Mid-size models. Code generation, UI work, active-zone tasks."
+    providers: [gemini]
+  - class: light
+    aviation: "Cessna 172"
+    description: "Small fast models. Summaries, markdown updates, experimental zones."
+    providers: []
+  - class: ultralight
+    aviation: "Drone / glider"
+    description: "Scripted agents. No LLM required. Audits, linting, file watching."
+    providers: [gndctrl-auditor, gndctrl-writer]
+
+# ── Global Conventions ────────────────────────────────────────────────────────
+
+conventions:
+  language_defaults:
+    python: "3.12 — f-strings, pathlib, type hints"
+    javascript: "ES modules where possible; vanilla JS preferred over framework for simple UI"
+    css: "Separate .css files required — inline <style> blocks break the IDE Style tab"
+  naming:
+    airspace_ids: "3-4 chars, uppercase (CHI, AUTH, PMT)"
+    zone_ids: "SCREAMING_SNAKE_CASE (AUTH_CORE, CONTAINER_ORCHESTRATION)"
+    node_ids: "AIRSPACE://ZONE_ID.function_name (CHI://AUTH_CORE.seed_admin)"
+    crids_fleet: "AIRSPACE-ZONE_ABBREV-YYYYMMDD-SEQ (CHI-AUTH-20260324-001)"
+    project_docs: "[project-name].gndctrl in workspace root"
+    logbook_files: "CRID-short-description.md in /logbook"
+  file_structure:
+    workspace: "/workspace — all user code here"
+    project_doc: "/workspace/[name].gndctrl"
+    logbook: "/workspace/logbook/"
+    user_notes: "/workspace/project.md — freeform user context"
+    dev_server_start: "/workspace/.pchisel-start — auto-start script"
+
+# ── Approved Tool Registry ────────────────────────────────────────────────────
+
+approved_tools:
+  pre_installed:
+    - curl, wget, git, vim, unzip, zip, tar, gosu
+    - python 3.12 with pip
+    - node 22 with npm
+    - Claude Code CLI (active); Gemini CLI, Codex (planned)
+  available_via_pip:
+    - fastapi, uvicorn, httpx, pydantic, sqlite3 (stdlib)
+  not_available:
+    - docker (not inside containers — Docker socket not mounted into project containers)
+    - postgres, redis, mysql (no external services — use SQLite)
+
+# ── Escalation Rules ──────────────────────────────────────────────────────────
+
+escalation:
+  always_surface_to_user:
+    - Any change to a locked (5) zone
+    - Deleting files larger than 50 lines without prior discussion
+    - Changes to .env files or secrets
+    - Modifying authentication or authorization logic
+    - Cross-container network configuration
+    - Introducing a library not in the approved_tools registry
+  act_autonomously:
+    - Bug fixes within active or experimental zones
+    - Adding new files that don't modify existing zones
+    - Updating documentation and logbook entries
+
+# ── AI Provider Registry ──────────────────────────────────────────────────────
+
+ai_providers:
+  - id: claude
+    name: Claude Code (Anthropic)
+    weight_class: heavy   # Sonnet default; Opus = super
+    contract_path: /home/chisel/.claude/CLAUDE.md
+    status: active
+  - id: gemini
+    name: Google Gemini CLI
+    weight_class: medium
+    contract_path: /home/chisel/.gemini/GEMINI.md
+    status: planned
+  - id: codex
+    name: OpenAI Codex
+    weight_class: medium
+    contract_path: /workspace/AGENTS.md
+    status: planned
+  - id: copilot
+    name: GitHub Copilot
+    weight_class: medium
+    contract_path: /workspace/.github/copilot-instructions.md
+    status: planned
+
+# ── Pre-flight Protocol ───────────────────────────────────────────────────────
+
+preflight:
+  token_budget: "<4,000 tokens total"
+  steps:
+    1: "[fleet] Load master — curl -s http://pchisel-app:8000/api/pchisel/master | head -200 (~500 tokens)"
+    2: "Load project doc — read /workspace/*.gndctrl — zone registry, architecture, gotchas (~1,000 tokens)"
+    3: "Resolve deps — for each task-relevant zone, trace deps[]; load full docs for sensitive/locked zones; load relevant logbook entries by CRID (cold memory)"
+    4: "Validate weight class — check minimum_agent_class on each relevant zone; deny entry if insufficient"
+    5: "Check zone locks — confirm no relevant zone is locked by another active agent session"
+    6: "Issue clearance brief — state: weight class, authorised zones, active constraints, relevant logbook CRIDs, green light or block with reason"
+
+# ── Known Solutions Library ───────────────────────────────────────────────────
+# Grows via gndctrl Writer promoting decisions from project logbooks.
+
+known_solutions: []
+  # Format:
+  # - pattern_id: PATTERN_001
+  #   contributed_by: "airspace=CHI, project=pchisel-app"
+  #   date: "YYYY-MM-DD"
+  #   problem: "Short description"
+  #   solution: |
+  #     What works and how.
+  #   applicable_to: [CHI://ZONE_ID]
+  #   human_verified: false
