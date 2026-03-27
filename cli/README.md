@@ -21,5 +21,5 @@ gndctrl export --format gitagent  # Export to GitAgent / Claude Code / Gemini / 
 ## Implementation Notes
 
 - Single binary preferred (Go or Rust) for easy distribution across CLI environments
-- Python fallback acceptable for initial prototype given pChisel's Python-first environment
+- Python fallback acceptable for initial prototype — v0.1.0 ships as a pip package
 - Must work inside Docker containers without root

@@ -1,6 +1,5 @@
 """
 Scan source files for @gndctrl:zone and @gndctrl:node markers.
-Also handles @pychisel:zone / @pychisel:node for backwards compatibility.
 """
 import re
 from pathlib import Path
@@ -28,13 +27,12 @@ SKIP_DIRS = frozenset({
 })
 
 # Match the gndctrl marker prefix (after any comment character)
-# Supports @gndctrl and @pychisel namespaces
 _ZONE_RE = re.compile(
-    r"@(?:gndctrl|pychisel):zone\s+(START|END|meta)\s*(?:\|\s*(.+))?$",
+    r"@gndctrl:zone\s+(START|END|meta)\s*(?:\|\s*(.+))?$",
     re.IGNORECASE,
 )
 _NODE_RE = re.compile(
-    r"@(?:gndctrl|pychisel):node\s+(.+)$",
+    r"@gndctrl:node\s+(.+)$",
     re.IGNORECASE,
 )
 
@@ -76,11 +74,11 @@ def _parse_fields(raw: str) -> dict:
 
 def _extract_marker(line: str) -> str | None:
     """
-    Strip comment syntax and return the @gndctrl/pychisel marker content,
+    Strip comment syntax and return the @gndctrl marker content,
     or None if the line contains no marker.
     """
     # Find the marker anchor — works regardless of comment style
-    for prefix in ("@gndctrl:", "@pychisel:"):
+    for prefix in ("@gndctrl:",):
         idx = line.find(prefix)
         if idx != -1:
             # Strip trailing comment closers like */ -->

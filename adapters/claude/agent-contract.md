@@ -1,6 +1,6 @@
 ## What You Are
 
-You are an AI agent operating inside a gndctrl-governed pChisel project container.
+You are an AI agent operating inside a gndctrl-governed project.
 
 The codebase uses `@gndctrl:zone` and `@gndctrl:node` markers to annotate zones and
 non-obvious functions. Read these markers before acting — they tell you stability,
@@ -16,16 +16,17 @@ exactly where you left off.
 
 ## gndctrl Pre-flight — Run This Before Every Session
 
-**Step 1 — Load master context** (~500 tokens)
+**Step 1 — Load zone index** (~200 tokens)
 ```bash
-curl -s http://pchisel-app:8000/api/pchisel/master | head -200
+gndctrl preflight
 ```
+This lists all zones with stability levels and descriptions.
 
-**Step 2 — Load project document** (~1,000 tokens)
+**Step 2 — Load project document** (~500 tokens)
 ```bash
-cat /workspace/*.gndctrl
+cat .gndctrl   # or run: gndctrl zones
 ```
-If no `.gndctrl` file exists, check for `*.pchisel` (legacy format) and treat all code as `stability=active`. Recommend creating a project document before the session ends.
+If no `.gndctrl` file exists, treat all code as `stability=active`. Recommend running `gndctrl init` before the session ends.
 
 **Step 3 — Resolve dependency graph**
 - Identify which zones the task touches from the zone registry
@@ -34,7 +35,7 @@ If no `.gndctrl` file exists, check for `*.pchisel` (legacy format) and treat al
 - Load relevant logbook entries from `/workspace/logbook/` by CRID (cold memory — only what's needed)
 
 **Step 4 — Validate your weight class**
-- Your weight class is determined by the model you are (Heavy = Claude Sonnet, Super = Claude Opus, Medium = Gemini)
+- Your weight class maps to your model tier (ultralight → light → medium → heavy → super)
 - For each task-relevant zone, check `minimum_agent_class`
 - If your class is below the zone's minimum: **do not proceed**. State which zone, what class is required, and hold for a heavier agent or human override.
 
@@ -51,18 +52,6 @@ Confirm to the user:
 - Green light — or block with reason
 
 Total pre-flight budget: **under 4,000 tokens.**
-
----
-
-## Platform Laws
-
-You are running inside a Docker container on a shared production server. Hard boundaries:
-
-- Your world is `/workspace/` and `/tmp/` — nothing else
-- Never run `docker` commands of any kind from inside this container
-- Never access `/home/pchisel/` or any host path
-- Never modify `/app/` (IDE backend) — read only
-- Never write to another airspace's locked or sensitive zone without explicit cross-airspace clearance
 
 ---
 
@@ -121,7 +110,7 @@ Logbook entry format:
 
 ## Contributing Knowledge
 
-When you solve a recurring problem — something that would save the next agent time — append it to the project's `known_solutions` section in `/workspace/*.gndctrl`.
+When you solve a recurring problem — something that would save the next agent time — append it to the project's `known_solutions` section in the `.gndctrl` file.
 
 When it's platform-wide (applies beyond this project), mark it as a candidate for master promotion by adding `promote_to_master: true`. The gndctrl Writer will queue it for human review.
 

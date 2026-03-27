@@ -142,9 +142,6 @@ gndctrl recognises five zone types. Each has its own pre-flight contract templat
 
 Zone coverage works at three levels, from broad to surgical. The same three layers apply in single and fleet mode.
 
-> **Implementation note — marker namespace during Chisel validation phase:**
-> The live Chisel fleet implementation currently uses `@pychisel:zone` / `@pychisel:node` markers for tenant project containers (single-mode), while platform-level fleet code uses `@gndctrl:zone` / `@gndctrl:node`. This split reflects the internal testing context: `@pychisel` is the interim namespace inside Chisel, `@gndctrl` is the canonical spec namespace. A Phase B migration (`@pychisel` → `@gndctrl`) runs once the system has been proven in production. All examples in this spec use the canonical `@gndctrl` naming.
-
 **Layer 1 — Directory level** (`.gndctrl` file, path patterns)
 The source of truth. Zones defined by file path patterns. Any file matching a pattern automatically inherits the zone. New files added to the feature are captured automatically.
 
@@ -728,7 +725,7 @@ gndctrl originates from the pChisel context management system built inside Chise
 - `pchisel-app.gndctrl` — platform project document with 6 live zones: AUTH_CORE, PROJECT_MGMT, CONTAINER_ORCHESTRATION, KEY_STORE, ROUTING, GNDCTRL_API
 - `logbook/` — 3 CRID-indexed entries in production (CHI-AUTH-20260324-001, CHI-CONT-20260324-001, CHI-CONT-20260324-002)
 - `gndctrl-agent-contract.md` — fleet-mode contract deployed to all AI provider paths at container boot
-- `pchisel-agent-contract.md` — single-mode contract for tenant project containers (interim `@pychisel` namespace, Phase B rename pending)
+- `gndctrl-agent-contract.md` (single-mode) — contract for tenant project containers using `@gndctrl:zone` markers
 - Zone markers in `backend/routes/` (fleet) and `backend/scheduler_dispatch.py`
 - Template `project.gndctrl` scaffolded for all new workspace projects
 
@@ -771,14 +768,12 @@ Once proven, gndctrl is extracted as a standalone product. Chisel becomes the re
 - [x] Register gndctrl.dev
 - [x] Write gndctrl-spec v0.1.0 (this document)
 - [x] Build zone marker format into Chisel as fleet mode battle test (Phase 1 complete 2026-03-23)
-  - 6 zones live in pchisel-app, master + project .gndctrl files, logbook with 3 entries, two agent contracts deployed
-  - Note: tenant projects use interim `@pychisel:zone` namespace — Phase B rename to `@gndctrl:zone` pending
+  - 6 zones live in pchisel-app, master + project .gndctrl files, logbook with 3 entries, agent contracts deployed
+- [x] Create private GitHub repo — https://github.com/internetsguy/gndctrl
+- [x] Build gndctrl CLI v0.1.0 — init, audit, preflight, zones (2026-03-27)
 - [ ] Phase 2 — Auditor enforcement (in progress internally)
 - [ ] Phase 3 — Writer self-maintenance
 - [ ] Phase 4 — Fleet validation across multiple real projects
-- [ ] Create private GitHub repo (personal account)
-- [ ] Migrate `@pychisel:zone` → `@gndctrl:zone` across platform (Phase B)
-- [ ] Build gndctrl CLI (audit + preflight first, single mode, then fleet)
 - [ ] Build GitHub Action (single mode first)
 - [ ] Add fleet mode to GitHub Action
 - [ ] Decide monetisation model

@@ -26,9 +26,9 @@ Agent containers call `http://gndctrl:7070/preflight` before each task. The side
 
 ## Entrypoint Injection Mode
 
-For environments like pChisel where each project is a container cloned from a base image. The gndctrl agent contract is injected at container boot via `entrypoint.sh`, and the pre-flight sequence runs against the master `.gndctrl` served by the platform API.
+For environments where each project runs inside a container cloned from a base image. The gndctrl agent contract is injected at container boot via `entrypoint.sh`, and the pre-flight sequence runs against the project's `.gndctrl` file on startup.
 
-This is the live mode running inside pChisel today.
+Useful for AI dev platforms, CI runners, or any setup where agents spin up in fresh containers per task.
 
 ## Planned Images
 
