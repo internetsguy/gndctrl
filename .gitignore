@@ -1,0 +1,14 @@
+# Python build / venv scratch
+.venv/
+venv/
+*.egg-info/
+__pycache__/
+*.pyc
+*.pyo
+build/
+dist/
+
+# Env
+.env
+.env.*
+!.env.example
