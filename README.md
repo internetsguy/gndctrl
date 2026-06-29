@@ -21,10 +21,12 @@ Think of it as **Air Traffic Control for your codebase.**
 | Phase | Status |
 |---|---|
 | Spec v0.1.0 | ✓ Complete |
-| Chisel fleet implementation | ✓ Running in production |
-| CLI (audit + preflight) | Planned |
+| Reference fleet implementation | ✓ Running in production |
+| CLI (`init` · `audit` · `preflight` · `zones`) | ✓ Built — runs from source |
+| Runtime enforcement hook (PreToolUse read-gate) | ✓ Running in production |
 | GitHub Action | Planned |
 | Provider adapters | In progress (Claude done) |
+| Published packages (PyPI / npm / curl) | Planned |
 | Hosted platform (gndctrl.dev) | Planned |
 
 ---
@@ -34,7 +36,9 @@ Think of it as **Air Traffic Control for your codebase.**
 ```
 gndctrl/
 ├── spec/               # The open standard — zone marker format, .gndctrl schema, stability tiers
-├── cli/                # gndctrl init / preflight / audit / export (planned)
+├── src/gndctrl/        # The CLI package — parser, schema validator, auditor, preflight resolver
+├── docs/               # how-it-works.md — the mechanism + why it beats a plain prompt file
+├── cli/                # legacy entry stub (superseded by src/gndctrl)
 ├── adapters/           # Provider-specific agent contract templates
 │   ├── claude/         # Claude Code + Claude API contracts (done)
 │   ├── gemini/         # Gemini CLI adapter (planned)
@@ -75,37 +79,38 @@ The same marker syntax, same stability tiers, same agent contracts. Scale is a c
 
 ---
 
-## Installation (planned)
+## Install & use
 
-### CLI
+The CLI works today, installed from source:
+
 ```bash
-curl -fsSL https://gndctrl.dev/install.sh | sh
-gndctrl init
+pip install -e .          # from the repo root
+gndctrl init              # scaffold .gndctrl + logbook/ (auto-detects single vs fleet)
+gndctrl audit             # validate markers, CRIDs, dependency integrity (exit 1 on errors)
+gndctrl audit --format json   # CI-friendly output
+gndctrl preflight --zones PAYMENT --agent-class heavy   # resolve deps + clearance
+gndctrl zones             # list zones
 ```
 
-### Docker sidecar
-```yaml
-services:
-  gndctrl:
-    image: gndctrl/gndctrl:latest
-    volumes:
-      - .:/workspace:ro
-```
+Published installers are planned but not yet live:
 
-### npm / pip (planned)
 ```bash
-npm install -g gndctrl
+# planned — not available yet
 pip install gndctrl
+npm install -g gndctrl
+curl -fsSL https://gndctrl.dev/install.sh | sh
 ```
 
 ---
 
-## Spec
+## Docs
 
-Full specification: [`spec/gndctrl-spec-v0.1.0.md`](spec/gndctrl-spec-v0.1.0.md)
+- **[docs/how-it-works.md](docs/how-it-works.md)** — the full mechanism, why it beats a plain
+  prompt file, the "it's software, not a prompt" breakdown, and the token-economy data.
+- **Spec:** [`spec/gndctrl-spec-v0.1.0.md`](spec/gndctrl-spec-v0.1.0.md)
 
 ---
 
 ## Licence
 
-Private — all rights reserved until monetisation strategy is resolved. Do not distribute.
+Licensed under the **Apache License 2.0** — see [LICENSE](LICENSE).
