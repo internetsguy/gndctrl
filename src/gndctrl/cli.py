@@ -2,6 +2,7 @@
 gndctrl CLI — Ground Control for your codebase.
 """
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -380,3 +381,113 @@ def list_zones(path):
     console.print(f"  [bold]{doc.project}[/bold]  [dim]{doc.airspace or 'single mode'}[/dim]\n")
     console.print(table)
     console.print()
+
+
+# ── gndctrl lock ──────────────────────────────────────────────────────────────
+# Runtime zone-lock table (.gndctrl.locks). Holds while the holder PID is alive;
+# stale (dead-PID) entries are auto-reclaimed. Not part of the .gndctrl document.
+
+def _lock_root(path: Path) -> Path:
+    """Directory the .gndctrl.locks should live in — beside the nearest .gndctrl,
+    or the given dir if the project isn't initialised yet."""
+    gf = _find_gndctrl(path.resolve())
+    return gf.parent if gf else path.resolve()
+
+
+@main.group()
+def lock():
+    """Runtime zone locks (.gndctrl.locks) — stop two agents editing one zone at once."""
+    pass
+
+
+_PATH_ARG = dict(default=".", type=click.Path(exists=True, file_okay=False, path_type=Path))
+
+
+@lock.command("list")
+@click.argument("path", **_PATH_ARG)
+def lock_list(path):
+    """Show zones currently locked (dead holders are auto-pruned). PATH = project dir."""
+    from . import lockfile
+    held = lockfile.list_locks(_lock_root(path))
+    if not held:
+        console.print("  [dim]No zones locked.[/dim]")
+        return
+    console.print()
+    for zone, e in sorted(held.items()):
+        console.print(
+            f"  [red]■[/red] [bold]{zone}[/bold]  "
+            f"[dim]pid={e.get('pid')} {e.get('provider','')} "
+            f"holder={e.get('holder','') or '—'} since {e.get('acquired_at','')}[/dim]"
+        )
+    console.print()
+
+
+@lock.command("acquire")
+@click.argument("zone")
+@click.argument("path", **_PATH_ARG)
+@click.option("--pid", type=int, default=None,
+              help="PID that owns the lock; it auto-frees when this PID exits (default: parent process).")
+@click.option("--provider", default="", help="Label — which agent/provider holds it.")
+@click.option("--holder", default="", help="Label — session or user id.")
+def lock_acquire(zone, path, pid, provider, holder):
+    """Acquire ZONE in project PATH. Exit 0 if taken, 3 if a live holder already has it."""
+    from . import lockfile
+    pid = pid or os.getppid()
+    ok, cur = lockfile.acquire(_lock_root(path), zone, pid, provider=provider, holder=holder)
+    if ok:
+        console.print(f"  [green]✓[/green] locked [bold]{zone}[/bold]  [dim]pid={pid}[/dim]")
+        return
+    console.print(
+        f"  [red]✗ HELD[/red]  [bold]{zone}[/bold] is locked by "
+        f"[dim]pid={cur.get('pid')} {cur.get('provider','')} "
+        f"holder={cur.get('holder','') or '—'} since {cur.get('acquired_at','')}[/dim]"
+    )
+    sys.exit(3)
+
+
+@lock.command("release")
+@click.argument("zone")
+@click.argument("path", **_PATH_ARG)
+@click.option("--pid", type=int, default=None, help="Only release if held by this PID (default: parent process).")
+def lock_release(zone, path, pid):
+    """Release ZONE in project PATH if held by --pid."""
+    from . import lockfile
+    pid = pid or os.getppid()
+    if lockfile.release(_lock_root(path), zone, pid):
+        console.print(f"  [green]✓[/green] released [bold]{zone}[/bold]")
+    else:
+        console.print(f"  [dim]{zone} was not held by pid={pid} — nothing to release.[/dim]")
+
+
+@lock.command("check")
+@click.argument("path", **_PATH_ARG)
+@click.option("--zone", "-z", default=None, help="Zone id to check.")
+@click.option("--file", "-f", "file_", default=None, help="Resolve a FILE to its zone, then check that zone.")
+def lock_check(path, zone, file_):
+    """Check whether a zone is free (by --zone or --file). Exit 0 free, 3 held. PATH = project dir."""
+    from . import lockfile
+    from .models import zone_for_path
+    root = _lock_root(path)
+    if file_ and not zone:
+        gf = _find_gndctrl(path.resolve())
+        if not gf:
+            console.print("  [red]✗[/red] No .gndctrl found to resolve --file against.")
+            sys.exit(1)
+        doc = _load_or_exit(gf)
+        zone = zone_for_path(doc, file_)
+        if not zone:
+            console.print(f"  [dim]{file_} maps to no zone — not governed, free to edit.[/dim]")
+            return
+        console.print(f"  [dim]{file_} → zone {zone}[/dim]")
+    if not zone:
+        console.print("  Usage: gndctrl lock check [PATH] --zone ZONE   |   --file FILE")
+        sys.exit(1)
+    e = lockfile.check(root, zone)
+    if not e:
+        console.print(f"  [green]✓ FREE[/green]  [bold]{zone}[/bold]")
+        return
+    console.print(
+        f"  [red]✗ HELD[/red]  [bold]{zone}[/bold]  "
+        f"[dim]pid={e.get('pid')} {e.get('provider','')} since {e.get('acquired_at','')}[/dim]"
+    )
+    sys.exit(3)

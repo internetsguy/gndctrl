@@ -353,6 +353,39 @@ Lock files must be gitignored, are safe to delete when no agent sessions are act
 
 In fleet mode, the lock table is fleet-wide. An agent working in the `PMT` airspace that depends on `AUTH://AUTH_CORE` will see if another agent has that zone locked — and will wait or reroute rather than conflict. This is the core capability that makes true parallel multi-agent development safe.
 
+#### Lock file format
+
+`.gndctrl.locks` is JSON — one entry per currently-held zone. The reference implementation lives
+in `gndctrl` (`gndctrl lock acquire|release|list|check`, module `gndctrl.lockfile`); any harness
+may read/write the same shape directly (the pChisel reference deployment does so at its chat
+dispatch point, keyed to the agent subprocess).
+
+```json
+{
+  "zones": {
+    "AUTH_CORE": {
+      "pid": 4821,
+      "provider": "codex",
+      "holder": "session-or-user-id",
+      "acquired_at": "2026-07-04T12:00:00+00:00"
+    }
+  }
+}
+```
+
+Rules:
+- **Liveness by PID.** A lock is held only while `pid` names a live process **in the same PID
+  namespace as the reader**. Stale entries (dead PID) are ignored on read and reclaimed on the
+  next acquire — a crashed agent never wedges a zone. (Cross-namespace readers, e.g. a
+  containerised CLI checking a host holder, cannot see the PID and must not rely on liveness —
+  use an in-namespace holder, or manual `release`.)
+- **Re-entrant.** The same PID re-acquiring a zone it already holds succeeds.
+- **Atomicity.** Read-modify-write is guarded by an advisory file lock (`flock`); serialisation is
+  deterministic (sorted keys).
+- **Fail-safe.** A malformed or unreadable lock file reads as empty (no lock) — governance is
+  additive and must never block work on its own error.
+- `acquired_at` is informational (ISO-8601 UTC); `provider`/`holder` are free-text labels.
+
 ### Hot Memory vs Cold Memory
 
 gndctrl manages agent context in two tiers to keep token usage minimal. The same principle applies in both modes — fleet mode simply has an additional hot memory layer at the master level.

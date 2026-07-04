@@ -1,5 +1,30 @@
+import fnmatch
 from dataclasses import dataclass, field
 from typing import Optional
+
+
+def zone_for_path(doc, relpath):
+    """Return the id of the first zone whose `paths[]` patterns match `relpath`, else None.
+
+    `paths[]` entries are glob patterns (e.g. "backend/routes/*.py", "src/billing/*"). A path
+    matches if it fnmatches the pattern, equals it, or falls under a directory-style pattern
+    (pattern treated as a prefix: "src/billing" matches "src/billing/webhook.py"). First match
+    wins in zone-declaration order — deterministic and enough for lock resolution; inline
+    @gndctrl:zone markers (which can override path patterns per file) are not consulted here.
+    """
+    rel = str(relpath).strip().lstrip("./")
+    if not rel:
+        return None
+    for zid, zone in getattr(doc, "zones", {}).items():
+        for pat in (getattr(zone, "paths", None) or []):
+            pat = str(pat).strip().lstrip("./")
+            if not pat:
+                continue
+            if (rel == pat
+                    or fnmatch.fnmatch(rel, pat)
+                    or fnmatch.fnmatch(rel, pat.rstrip("/") + "/*")):
+                return zid
+    return None
 
 
 # ── Inline marker objects (from scanning source files) ────────────────────────
