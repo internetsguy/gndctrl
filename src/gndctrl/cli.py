@@ -433,6 +433,13 @@ def lock_acquire(zone, path, pid, provider, holder):
     """Acquire ZONE in project PATH. Exit 0 if taken, 3 if a live holder already has it."""
     from . import lockfile
     pid = pid or os.getppid()
+    if pid <= 0:
+        console.print(
+            "  [red]✗[/red] No valid holder PID (getppid() is 0 — you're likely running through the "
+            "docker wrapper, which is a separate PID namespace). Pass [bold]--pid <a live process>[/bold] "
+            "explicitly. A lock with no live holder is instantly stale and can't protect the zone."
+        )
+        sys.exit(2)
     ok, cur = lockfile.acquire(_lock_root(path), zone, pid, provider=provider, holder=holder)
     if ok:
         console.print(f"  [green]✓[/green] locked [bold]{zone}[/bold]  [dim]pid={pid}[/dim]")

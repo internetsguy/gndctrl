@@ -365,6 +365,7 @@ dispatch point, keyed to the agent subprocess).
   "zones": {
     "AUTH_CORE": {
       "pid": 4821,
+      "host": "container-or-machine-id",
       "provider": "codex",
       "holder": "session-or-user-id",
       "acquired_at": "2026-07-04T12:00:00+00:00"
@@ -374,11 +375,16 @@ dispatch point, keyed to the agent subprocess).
 ```
 
 Rules:
-- **Liveness by PID.** A lock is held only while `pid` names a live process **in the same PID
-  namespace as the reader**. Stale entries (dead PID) are ignored on read and reclaimed on the
-  next acquire — a crashed agent never wedges a zone. (Cross-namespace readers, e.g. a
-  containerised CLI checking a host holder, cannot see the PID and must not rely on liveness —
-  use an in-namespace holder, or manual `release`.)
+- **Liveness by PID, scoped by host.** A lock is held only while `pid` names a live process. An
+  entry carries the optional `host` (the writer's hostname / namespace id). A reader reclaims a
+  stale entry **only when `host` matches its own** and the PID is dead there — an entry from a
+  *different* host is left untouched, because a foreign reader (e.g. a containerised CLI inspecting
+  an in-container harness's locks) cannot judge another namespace's PIDs and must never destroy a
+  live lock. Readers tolerate a missing `host` (legacy/same-writer) and fall back to plain PID
+  liveness.
+- **Non-positive PID is always dead.** `pid <= 0` is never a valid holder and is dropped on sight:
+  `os.kill(0, 0)` targets the caller's own process group and would otherwise make a pid-0 lock
+  immortal (e.g. a CLI running as PID 1 whose `getppid()` is 0). Tools must refuse to record one.
 - **Re-entrant.** The same PID re-acquiring a zone it already holds succeeds.
 - **Atomicity.** Read-modify-write is guarded by an advisory file lock (`flock`); serialisation is
   deterministic (sorted keys).

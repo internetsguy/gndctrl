@@ -14,18 +14,31 @@ chisel-base/backend/gndctrl_gate.py; keep the two in sync):
                              "holder": "session-or-user-id",
                              "acquired_at": "2026-07-04T12:00:00+00:00"}}}
 
-Liveness: a lock is held only while its holder PID is alive. Stale entries (dead PID) are
-ignored on read and reclaimed on the next acquire — a crashed agent never wedges a zone.
-All operations are stdlib-only and guarded by an advisory `fcntl.flock` for the
+Liveness: a lock is held only while its holder PID is alive **in the same host / PID namespace**
+that recorded it. Stale entries (dead PID, same host) are ignored on read and reclaimed on the next
+acquire — a crashed agent never wedges a zone. Entries written by a *different* host (the optional
+`host` field) are NOT reclaimed by a foreign reader — it cannot judge another namespace's PIDs, so
+it leaves them alone rather than destroying live locks (e.g. a containerised CLI must not wipe an
+in-container harness's locks). A non-positive/invalid PID is always treated as dead regardless of
+host — `os.kill(0, 0)` targets the caller's own process group and would otherwise look "alive"
+forever. All operations are stdlib-only and guarded by an advisory `fcntl.flock` for the
 read-modify-write; every function fails safe (a malformed or unreadable file reads as empty).
+
+Format (optional `host` added; readers tolerate its absence):
+
+    {"zones": {"AUTH_CORE": {"pid": 4821, "host": "container-id", "provider": "codex",
+                             "holder": "session-or-user-id",
+                             "acquired_at": "2026-07-04T12:00:00+00:00"}}}
 """
 import fcntl
 import json
 import os
+import socket
 from datetime import datetime, timezone
 from pathlib import Path
 
 LOCK_FILENAME = ".gndctrl.locks"
+_HOST = socket.gethostname()
 
 
 def lock_path(root) -> Path:
@@ -36,13 +49,27 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def pid_alive(pid) -> bool:
-    """True if the process is alive. Signal 0 never delivers a signal — it only checks
-    existence/permission. Any error (no such pid, non-int) → treat as dead."""
+def _pid_int(pid):
+    """Parse a pid to a positive int, or None. pid <= 0 is never a valid holder: os.kill(0, 0)
+    signals the caller's own process group and always 'succeeds', which would make a pid-0 lock
+    immortal (e.g. a CLI run as PID 1 whose getppid() is 0)."""
     try:
-        os.kill(int(pid), 0)
+        n = int(pid)
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
+
+
+def pid_alive(pid) -> bool:
+    """True if the process is alive in THIS namespace. Signal 0 only checks existence/permission.
+    A non-positive/invalid pid is always dead (see _pid_int)."""
+    n = _pid_int(pid)
+    if n is None:
+        return False
+    try:
+        os.kill(n, 0)
         return True
-    except (OSError, ValueError, TypeError):
+    except OSError:
         return False
 
 
@@ -57,10 +84,22 @@ def _read_raw(fh) -> dict:
 
 
 def _prune(locks: dict) -> dict:
-    """Drop zone entries whose holder PID is dead (stale-lock reclamation)."""
+    """Drop dead holders (stale-lock reclamation). Rules, in order:
+      1. invalid/non-positive pid → always dead (drop) — never immortal;
+      2. entry from a DIFFERENT host → keep (a foreign reader can't judge another namespace's
+         PIDs and must not destroy its live locks);
+      3. same host (or no host recorded) → keep iff the pid is alive here."""
     zones = locks.get("zones") if isinstance(locks, dict) else None
     zones = zones if isinstance(zones, dict) else {}
-    live = {z: e for z, e in zones.items() if isinstance(e, dict) and pid_alive(e.get("pid"))}
+    live = {}
+    for z, e in zones.items():
+        if not isinstance(e, dict) or _pid_int(e.get("pid")) is None:
+            continue
+        host = e.get("host")
+        if host and host != _HOST:
+            live[z] = e
+        elif pid_alive(e.get("pid")):
+            live[z] = e
     return {"zones": live}
 
 
@@ -113,7 +152,8 @@ def acquire(root, zone, pid, provider="", holder=""):
         cur = zones.get(zone)
         if cur and pid_alive(cur.get("pid")) and int(cur.get("pid")) != pid:
             return (False, cur)
-        zones[zone] = {"pid": pid, "provider": provider, "holder": holder, "acquired_at": _now()}
+        zones[zone] = {"pid": pid, "host": _HOST, "provider": provider,
+                       "holder": holder, "acquired_at": _now()}
         return (True, None)
 
     return _mutate(root, fn)
