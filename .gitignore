@@ -12,3 +12,9 @@ dist/
 .env
 .env.*
 !.env.example
+
+# gndctrl runtime state (machine-managed — never commit)
+.gndctrl.locks
+
+# Staged inbound drops (provenance only, integrated by hand)
+incoming-*/

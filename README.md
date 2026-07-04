@@ -77,6 +77,8 @@ An agent hitting this zone:
 
 The same marker syntax, same stability tiers, same agent contracts. Scale is a configuration choice, not a conceptual shift.
 
+In both modes, runtime zone-lock state lives in a machine-managed `.gndctrl.locks` file (gitignored) — never in the `.gndctrl` document itself, which stays byte-stable so agent runtimes can cache it. See the *Cache-Stable Documents* section of the spec.
+
 ---
 
 ## Install & use

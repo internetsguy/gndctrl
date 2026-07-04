@@ -91,7 +91,7 @@ Three durable stores, all in the repo, all readable by the next agent or human:
 - **decision_log** — why an architectural choice was made, what was considered, what it affects.
 - **known_solutions** — generalizable fixes, so a solved problem stays solved across the team/fleet.
 
-A **CRID** (Control Record ID, e.g. `PMT-20260430-001`) is the immutable link between a marker in
+A **CRID** (Control Record ID, e.g. `STR-20260430-001`, or `PMT-STR-20260430-001` in fleet mode) is the immutable link between a marker in
 the code and its logbook entry. The code says *what*; the logbook says *why, and what not to touch*.
 
 ### 5. Enforcement — advice vs. a hard gate
@@ -114,9 +114,9 @@ decide.
 
 ### 6. Weight classes — provider-agnostic capability gating
 
-Agents differ in capability, so zones declare a **`minimum_agent_class`** — a floor, not a ceiling.
+Agents differ in capability, so zones declare a **`minimum_agent_class`** — a floor, not a ceiling. The class is declared per session; model names are never baked into the rules, only into a *suggested mapping* your deployment maintains (models turn over, your governance shouldn't).
 
-| Weight class | Examples |
+| Weight class | Examples (suggested mapping — yours may differ) |
 |---|---|
 | Ultralight | Scripted/rule-based (gndctrl's own Auditor/Writer) |
 | Light | Small fast local models (3–7B) |
@@ -169,7 +169,10 @@ fails the build:
 | A2 | A node pointing at a zone that doesn't exist |
 | A3 | A `@gndctrl:node` CRID with no matching logbook entry |
 | A4 | A malformed CRID |
+| A5 | A duplicate CRID — two markers claiming the same control record |
 | A6 | Dependency resolution — including **circular-dependency** detection |
+| A7 | Declared `deps[]` that have drifted from actual import/call relationships |
+| A8 | Orphaned markers — a node pointing at a function that no longer exists |
 | A9 | A zone that depends on a `deprecated` zone |
 | A10 | Zone-index drift — the map and the code have diverged |
 
@@ -238,6 +241,12 @@ wrong path. The map trades cheap (cached) reading for fewer charged (output) tur
 
 > **98.98% of every token our agents process is cached context, reused without charge. You
 > pay for what an agent writes, not what it reads — so handing it the map is the cheap part.**
+
+One caveat the spec now enforces: caching only pays while the map is **byte-identical** between
+reads. That's why the spec's *Cache-Stable Documents* rules exist — volatile content (timestamps,
+open questions) lives at the bottom of the `.gndctrl`, runtime lock state lives in a separate
+gitignored `.gndctrl.locks` file, and any tool that rewrites the document must preserve ordering.
+A map that churns at the top of the file is a map you pay to re-read.
 
 ---
 

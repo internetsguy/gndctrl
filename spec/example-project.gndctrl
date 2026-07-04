@@ -1,7 +1,11 @@
 # my-project.gndctrl
 # gndctrl project document — single mode example
-# gndctrl_spec: "0.1.0" | Updated: 2026-04-09
+# gndctrl_spec: "0.1.0"
 # READ THIS during pre-flight before touching any code.
+#
+# Cache-stable layout: stable content first, append-only sections next,
+# volatile content (open_questions, last_updated) at the bottom.
+# Runtime lock state lives in .gndctrl.locks — never in this file.
 
 airspace: null        # set to an airspace ID (e.g. MYAPP) when using fleet mode
 version: "0.1.0"
@@ -29,6 +33,7 @@ architecture:
 
 zones:
   AUTH:
+    brief: "Auth, sessions, roles"        # optional — loaded into the hot zone index
     stability: sensitive       # 5=locked 4=sensitive 3=stable 2=active 1=experimental 0=deprecated
     type: [code]
     minimum_agent_class: heavy # ultralight | light | medium | heavy | super
@@ -43,6 +48,7 @@ zones:
       - "Session-cookie auth over JWT — simpler revocation, no token refresh complexity."
 
   API:
+    brief: "REST routes — CRUD + business logic"
     stability: stable
     type: [code]
     minimum_agent_class: medium
@@ -52,6 +58,7 @@ zones:
     description: "REST API routes — CRUD, business logic."
 
   FRONTEND:
+    brief: "Vanilla JS/HTML UI, no build step"
     stability: active
     type: [code]
     minimum_agent_class: light
@@ -85,7 +92,11 @@ known_solutions:
     context: "FastAPI + Vite dev server running on separate ports."
     promote_to_master: false
 
-# ── Open Questions ────────────────────────────────────────────────────────────
+# ── Volatile ─────────────────────────────────────────────────────────────────
+# Everything below this line changes routinely. Keeping it last preserves the
+# prompt cache for everything above it.
 
 open_questions:
   - "Should AUTH encrypt session tokens at rest?"
+
+last_updated: "2026-04-09"

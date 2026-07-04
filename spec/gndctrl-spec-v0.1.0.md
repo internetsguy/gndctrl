@@ -1,8 +1,10 @@
 # gndctrl — Project Specification
-**Version:** 0.1.0-draft
-**Date:** 2026-03-23
+**Version:** 0.1.0-draft (rev 2)
+**Date:** 2026-03-23 · **Revised:** 2026-07-03
 **Status:** Private / Pre-release
 **Author:** Adam Harnden
+
+> **Rev 2 changes:** CRID examples corrected to the declared fleet format · zone lock table moved to a dedicated `.gndctrl.locks` runtime file · new *Cache-Stable Documents* rules · weight classes decoupled from hardcoded provider names · optional `brief:` zone field for the hot index.
 
 ---
 
@@ -105,19 +107,21 @@ PMT://STRIPE_SYNC      ← cross-airspace reference to payment service
 
 Every agent operating under gndctrl is assigned a **weight class** — borrowed directly from aviation's aircraft weight classification system. Weight class determines which zones an agent is cleared to enter. A zone can require a minimum weight class, ensuring that only sufficiently capable agents are trusted with critical or sensitive work.
 
-| Weight Class | Aviation Reference | Agent Type | Current Providers |
-|---|---|---|---|
-| **Super** | A380, An-225 — largest commercial aircraft | Frontier reasoning models. Reserved for `locked` zones and the most critical architectural decisions. | Claude Opus |
-| **Heavy** | 747, 777 — wide-body long-haul | Large capable models. Standard for `sensitive` zones, complex planning, security review. | Claude Sonnet, OpenAI GPT-4o |
-| **Medium** | 737, A320 — narrow-body workhorses | Mid-size models. Good for code generation, UI work, standard active-zone tasks. | Gemini, OpenAI Codex CLI |
-| **Light** | Cessna 172 — small general aviation | Small/fast models. Summaries, markdown updates, simple checks on `experimental` zones. | Small local models (3B) |
-| **Ultralight** | Drone / glider — no pilot required | Scripted or rule-based agents. Audits, linting, file watching. No LLM required. | gndctrl Auditor, gndctrl Writer |
+| Weight Class | Aviation Reference | Agent Type |
+|---|---|---|
+| **Super** | A380, An-225 — largest commercial aircraft | Frontier reasoning models. Reserved for `locked` zones and the most critical architectural decisions. |
+| **Heavy** | 747, 777 — wide-body long-haul | Large capable models. Standard for `sensitive` zones, complex planning, security review. |
+| **Medium** | 737, A320 — narrow-body workhorses | Mid-size models. Good for code generation, UI work, standard active-zone tasks. |
+| **Light** | Cessna 172 — small general aviation | Small/fast models. Summaries, markdown updates, simple checks on `experimental` zones. |
+| **Ultralight** | Drone / glider — no pilot required | Scripted or rule-based agents. Audits, linting, file watching. No LLM required. |
+
+**Weight class is declared, not inferred.** The class an agent operates under is declared at session start (by the scheduler, the adapter, or the user) and validated at pre-flight. The spec deliberately does **not** hardcode model names to classes — models turn over every few months, and the governance rules must outlive any provider lineup. Instead, each deployment maintains a *suggested provider mapping* in its master `.gndctrl` (`weight_classes[].providers`), which the scheduler uses as the default when dispatching an agent whose class isn't explicitly declared.
 
 Weight class is a **minimum floor, not a ceiling.** A heavier agent is always cleared to enter a lighter zone — a Super agent can go anywhere, a Heavy agent can enter any Medium, Light, or Ultralight zone freely. Clearance is only denied when an agent's class falls *below* the zone's minimum. A Light agent cannot enter a Heavy zone. A Medium cannot enter a Super zone.
 
 Weight class is declared per agent session and checked at pre-flight. A Medium agent attempting to enter a Heavy-required zone is denied clearance — not blocked arbitrarily, but told exactly why and what class is required.
 
-**Current provider lineup (Phase 1):**
+**Suggested provider mapping (reference deployment, non-normative — update as models change):**
 - Claude Opus → Super
 - Claude Sonnet → Heavy
 - OpenAI GPT-4o → Heavy
@@ -145,6 +149,8 @@ Zone coverage works at three levels, from broad to surgical. The same three laye
 **Layer 1 — Directory level** (`.gndctrl` file, path patterns)
 The source of truth. Zones defined by file path patterns. Any file matching a pattern automatically inherits the zone. New files added to the feature are captured automatically.
 
+Each zone may declare an optional **`brief:`** — a single line loaded into the hot-memory zone index at pre-flight. Longer `description`, `gotchas`, and `decisions` stay in cold memory and are only loaded when the zone is task-relevant. This keeps the always-loaded index as small as possible.
+
 Single mode example:
 ```yaml
 airspace: null        # omit or null in single mode
@@ -152,6 +158,7 @@ version: "0.1.0"
 
 zones:
   PAYMENT:
+    brief: "Charge processing + Stripe reconciliation"   # optional — hot-index one-liner
     stability: sensitive
     type: [code, data]
     paths:
@@ -214,7 +221,7 @@ In single mode, the airspace prefix is omitted:
 The most granular layer. Agents place these when they encounter or create something non-obvious — a workaround, a fragile dependency, a gotcha, a performance edge case. Placing a node marker requires creating a corresponding logbook entry.
 
 ```python
-# @gndctrl:node id=PMT://STRIPE_SYNC.reconcile_payment | risk=high | touches=[ledger, webhook_queue, stripe_api] | crid=PMT-20260323-001
+# @gndctrl:node id=PMT://STRIPE_SYNC.reconcile_payment | risk=high | touches=[ledger, webhook_queue, stripe_api] | crid=PMT-STR-20260323-001
 # @gndctrl:node note="Not idempotent. Caller must acquire distributed lock before invoking."
 async def reconcile_payment(event: dict) -> bool:
     ...
@@ -224,19 +231,19 @@ Multi-language examples:
 
 ```typescript
 // @gndctrl:zone START | id=AUTH://AUTH_CORE | deps=[] | stability=stable | type=code
-// @gndctrl:node id=AUTH://AUTH_CORE.verifyToken | risk=high | touches=[jwt_store] | crid=AUTH-20260323-001
+// @gndctrl:node id=AUTH://AUTH_CORE.verifyToken | risk=high | touches=[jwt_store] | crid=AUTH-AUTH-20260323-001
 export async function verifyToken(token: string): Promise<User> { ... }
 // @gndctrl:zone END | id=AUTH://AUTH_CORE
 ```
 
 ```css
 /* @gndctrl:zone START | id=DSN://DESIGN_SYSTEM | deps=[] | stability=stable | type=design */
-/* @gndctrl:node id=DSN://DESIGN_SYSTEM.colorTokens | risk=medium | touches=[theme_provider] | crid=DSN-20260323-001 */
+/* @gndctrl:node id=DSN://DESIGN_SYSTEM.colorTokens | risk=medium | touches=[theme_provider] | crid=DSN-DES-20260323-001 */
 ```
 
 ```go
 // @gndctrl:zone START | id=CHI://DATA_PIPELINE | deps=[AUTH://AUTH_CORE] | stability=active | type=data
-// @gndctrl:node id=CHI://DATA_PIPELINE.ingestRecord | risk=medium | touches=[postgres, redis] | crid=CHI-20260323-001
+// @gndctrl:node id=CHI://DATA_PIPELINE.ingestRecord | risk=medium | touches=[postgres, redis] | crid=CHI-DAT-20260323-001
 func ingestRecord(ctx context.Context, record Record) error { ... }
 // @gndctrl:zone END | id=CHI://DATA_PIPELINE
 ```
@@ -337,6 +344,13 @@ Stability tiers apply identically in single and fleet mode. Cross-airspace depen
 
 The scheduler enforces a zone lock table. When an agent enters a zone it acquires the lock. No second agent can touch that zone until the lock is released.
 
+**Where the lock table lives:** the lock table is runtime state, not documentation, and is **never written into a `.gndctrl` document.** It lives in a dedicated machine-managed file:
+
+- Single mode: `.gndctrl.locks` at the project root
+- Fleet mode: `.gndctrl.locks` at the fleet root (fleet-wide table, one source of truth)
+
+Lock files must be gitignored, are safe to delete when no agent sessions are active, and carry no history — the logbook and decision log are the durable records. Keeping volatile lock state out of the project document is what keeps the document byte-stable for prompt caching (see *Cache-Stable Documents*).
+
 In fleet mode, the lock table is fleet-wide. An agent working in the `PMT` airspace that depends on `AUTH://AUTH_CORE` will see if another agent has that zone locked — and will wait or reroute rather than conflict. This is the core capability that makes true parallel multi-agent development safe.
 
 ### Hot Memory vs Cold Memory
@@ -362,6 +376,18 @@ Fleet mode (additional):
 - Known solutions applicable to the task
 
 A well-maintained gndctrl setup delivers full pre-flight context in under 4,000 tokens for most tasks — compared to 40,000–200,000+ for raw codebase loading. This holds in both single and fleet mode because cold memory is only loaded when the task actually requires it.
+
+### Cache-Stable Documents
+
+gndctrl's token economy depends on prompt caching: a `.gndctrl` document read at pre-flight is cached by the agent runtime and reused free of charge on every subsequent turn — **but only while the document is byte-identical.** A single timestamp churning near the top of the file invalidates the cache for everything below it, on every session.
+
+Three rules keep documents cache-stable. Tooling (`gndctrl init`, the gndctrl Writer, the compact integration) **must** follow them; humans should.
+
+1. **Volatile content goes last.** `open_questions`, `last_updated`, audit summaries, and anything else that changes routinely live at the **bottom** of the document. Stable content — meta, architecture, conventions, the zone registry — comes first. Append-only sections (`decision_log`, `known_solutions`) sit between the two: they grow, but existing entries never change, so everything above them stays cached.
+2. **Runtime state never enters the document.** Zone locks, active sessions, and scheduler state live in `.gndctrl.locks` (machine-managed, gitignored). See *Zone Locking*.
+3. **Deterministic serialisation.** Any tool that rewrites a `.gndctrl` must preserve key order, use fixed indentation, and never reflow or re-sort existing content. Appends are appends — new entries go at the end of their section.
+
+Recommended document order, top to bottom: `airspace` / `version` → `meta` → `architecture` → `zones` → `decision_log` → `known_solutions` → `open_questions` → `last_updated`.
 
 ### Pre-flight Protocol
 
@@ -465,7 +491,7 @@ Action: Loading dependency docs now. Re-evaluating.
 
 gndctrl ships two agent contracts — one for each scale mode. Both share the same zone rules and stability enforcement; they differ in scope and overhead.
 
-**Single-mode contract** — delivered to agents working inside individual projects. No weight class enforcement, no cross-airspace lookups. Pre-flight is a 5-step sequence: load master context → load project doc → identify task zone → load deps if sensitive/locked → confirm. Total budget under 4,000 tokens.
+**Single-mode contract** — delivered to agents working inside individual projects. No cross-airspace lookups, no fleet lock table. Pre-flight is a 5-step sequence: load zone index → identify task zone → pre-flight the specific zones (weight class checked if declared) → load deps if sensitive/locked → confirm. Total budget under 4,000 tokens.
 
 **Fleet-mode contract** — delivered to agents working across or governing the platform. Adds full weight class validation, cross-airspace dep resolution, and zone lock table checks. All agents operating under gndctrl receive this standing contract in fleet mode, plus the airspace map and cross-airspace dep rules.
 
@@ -753,6 +779,8 @@ Once proven, gndctrl is extracted as a standalone product. Chisel becomes the re
 | **Guardrail** | A rule constraining agent behaviour based on zone stability, weight class, and dep declarations |
 | **Weight class** | Agent capability classification (Super / Heavy / Medium / Light / Ultralight) modelled on aviation aircraft weight categories |
 | **minimum_agent_class** | Zone or node field declaring the lowest weight class permitted to enter that zone |
+| **Lock file** | `.gndctrl.locks` — machine-managed runtime file holding the zone lock table; gitignored, never part of the `.gndctrl` document |
+| **Brief** | Optional one-line zone summary loaded into the hot-memory zone index |
 | **Hot memory** | Always-loaded context at pre-flight — conventions, zone index, airspace map |
 | **Cold memory** | On-demand context — full zone docs, dep chain docs, logbook entries, known solutions |
 | **Dep chain** | The full transitive dependency graph of zones involved in a given task |
