@@ -495,42 +495,7 @@ gndctrl ships two agent contracts — one for each scale mode. Both share the sa
 
 **Fleet-mode contract** — delivered to agents working across or governing the platform. Adds full weight class validation, cross-airspace dep resolution, and zone lock table checks. All agents operating under gndctrl receive this standing contract in fleet mode, plus the airspace map and cross-airspace dep rules.
 
-```
-## gndctrl Protocol
-
-You are operating in a gndctrl-governed codebase.
-
-Before modifying any code:
-1. Identify your weight class (Super / Heavy / Medium / Light / Ultralight)
-2. Identify the @gndctrl:zone marker for each file you intend to edit
-3. Check the zone's minimum_agent_class — if your class is insufficient, do not proceed. Report the required class and hold.
-4. Load the zone's documentation from the .gndctrl file
-5. Check the zone's stability tier and act accordingly
-6. Resolve the zone's deps[] list and load docs for any sensitive/locked deps
-7. In fleet mode: for any cross-airspace dep, load that airspace's .gndctrl first
-8. Confirm your planned actions stay within your authorised zone boundary
-
-When you encounter a @gndctrl:node marker:
-- Read the risk level before modifying the function
-- Check the touches[] list — if you are adding new system touches, flag it
-- Do not change a function's external signature without reading all zones that depend on it
-- Load the corresponding logbook entry if one exists (matched by CRID)
-
-When you implement a workaround, write a non-obvious function, or take a calculated risk:
-- Place a @gndctrl:node marker on the function with a new CRID
-- Single mode CRID format: ZONE_ABBREV-YYYYMMDD-SEQ
-- Fleet mode CRID format: AIRSPACE-ZONE_ABBREV-YYYYMMDD-SEQ
-- Create the corresponding logbook entry in /logbook before the task is considered complete
-- Pre-flight will check for CRIDs in node markers without matching logbook entries and flag them as integrity violations
-
-You must NEVER:
-- Attempt to enter a zone requiring a higher weight class than your own
-- Modify code in a locked zone without human clearance
-- Write to another airspace's locked or sensitive zone without explicit cross-airspace clearance [fleet]
-- Add a dependency on a deprecated zone
-- Introduce a library not in the tool registry without flagging it first
-- Leave a @gndctrl:zone START marker without a matching END marker
-```
+The full, canonical text of both contracts lives in [`docs/contracts/single-mode-contract.md`](../docs/contracts/single-mode-contract.md) and [`docs/contracts/fleet-mode-contract.md`](../docs/contracts/fleet-mode-contract.md). Deployments install the matching contract as the agent's standing instructions (system prompt, `AGENTS.md`, `CLAUDE.md`, or equivalent). The contracts are the single source of truth for pre-flight sequences, node-marker obligations, and the must-never rules — this spec deliberately does not restate them, so the two can never drift apart.
 
 ### Background Maintenance Agents
 
@@ -605,6 +570,25 @@ Markers may carry explicit spec version for forward compatibility:
 ```python
 # @gndctrl:zone START | id=AUTH://AUTH_CORE | deps=[] | stability=stable | gndctrl_spec=0.1.0
 ```
+
+### Upgrading from 0.1.0-draft (rev 1)
+
+Rev 2 is **additive** — existing documents declaring `version: "0.1.0"` remain valid as-is and
+keep declaring `"0.1.0"` (the `-draft (rev N)` suffix versions the spec *document*, not the
+`.gndctrl` schema; documents never carry it). No mass migration is required. Adopt the new
+conventions opportunistically, in this order of value:
+
+1. **Move volatile content to the bottom** (`open_questions`, `last_updated`, audit summaries)
+   the next time you touch the document — this is what unlocks prompt-cache stability.
+2. **Add `brief:` one-liners to zones** as you visit them — they shrink every future pre-flight.
+3. **Add `.gndctrl.locks` to `.gitignore`** if your deployment uses zone locking; delete any
+   lock tables embedded in the document itself.
+
+**CRIDs are immutable across the upgrade — and across mode migration.** A project that moves
+from single mode to fleet mode keeps its existing `ZONE-YYYYMMDD-SEQ` CRIDs unchanged
+(grandfathered); only CRIDs minted *after* the migration use the fleet
+`AIRSPACE-ZONE-YYYYMMDD-SEQ` format. Never rewrite an existing CRID — it is the stable key
+linking markers to logbook history.
 
 ---
 

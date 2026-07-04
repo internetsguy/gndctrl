@@ -91,8 +91,11 @@ Three durable stores, all in the repo, all readable by the next agent or human:
 - **decision_log** — why an architectural choice was made, what was considered, what it affects.
 - **known_solutions** — generalizable fixes, so a solved problem stays solved across the team/fleet.
 
-A **CRID** (Control Record ID, e.g. `STR-20260430-001`, or `PMT-STR-20260430-001` in fleet mode) is the immutable link between a marker in
-the code and its logbook entry. The code says *what*; the logbook says *why, and what not to touch*.
+A **CRID** (Control Record ID) is the immutable link between a marker in
+the code and its logbook entry — e.g. `AUTH-20260430-001` in single mode (zone abbreviation +
+date + sequence), or `PMT-STR-20260430-001` in fleet mode (airspace `PMT` + zone abbreviation
+`STR` for `STRIPE_SYNC` + date + sequence). The code says *what*; the logbook says *why, and
+what not to touch*.
 
 ### 5. Enforcement — advice vs. a hard gate
 
