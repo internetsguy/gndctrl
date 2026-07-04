@@ -102,15 +102,26 @@ what not to touch*.
 This is the line between gndctrl and a prompt file. gndctrl enforcement is two-layer:
 
 - **Soft** — the contract every agent loads tells it the rules (provider-agnostic; see §7).
-- **Hard** — platform-level guardrails the agent *cannot talk its way past*: file watches, commit
-  hooks, session scoping, and tool-call interception.
+- **Hard** — guardrails the agent *cannot talk its way past*, enforced by the runtime that launches
+  the agent rather than requested in a prompt.
 
-**This is live, not theoretical.** On the reference deployment, a pre-tool hook sits in front of
-every agent edit. If an agent tries to modify a file inside a governed zone *before it has read that
-zone's `.gndctrl`*, the edit is **denied** — the agent is handed back the reason and told to read the
-map first, then retry. The result: an agent physically cannot "act first, read the architecture last."
-The most common, most expensive agent failure — drifting from the design because it never looked —
-is removed at the tool layer, not requested in a prompt.
+**This is live, not theoretical** on the reference deployment (pChisel), at two enforcement points:
+
+- **Per-edit read-gate (Claude Code).** A pre-tool hook sits in front of every file edit. If the
+  agent tries to modify a file in a governed zone *before it has read that zone's `.gndctrl`*, the
+  edit is **denied** — it's handed the reason and told to read the map first. The agent physically
+  cannot "act first, read the architecture last." This is hook-based, so today it covers Claude Code.
+- **Dispatch gate + zone locks (every agent — Claude, Codex, Kilo).** At the single point where the
+  platform launches *any* agent, a turn targeting a `locked` zone is **refused** (surfaced as a
+  human-clearance message; no agent runs), and the target zone is **locked** in `.gndctrl.locks` for
+  the duration of the turn — so two agents never edit the same zone at once, while different zones
+  keep running in parallel. This is turn-level rather than per-edit, but it applies to every provider
+  because it lives in the harness, not a provider-specific hook.
+
+The most common, most expensive agent failure — drifting from the design because it never looked, or
+two agents clobbering each other — is removed at the runtime layer, not requested in a prompt.
+Commit-time gating (rejecting a commit that touches a locked zone) is on the roadmap (see the README
+status table).
 
 A locked zone is the same idea at the top of the dial: the agent surfaces a diff and stops. Humans
 decide.

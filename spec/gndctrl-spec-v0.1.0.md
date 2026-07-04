@@ -492,11 +492,14 @@ Guardrails operate at two levels in both modes:
 The agent's system prompt includes gndctrl awareness instructions. The agent self-enforces by reading pre-flight output and flagging scope violations.
 
 **Level 2 — Platform-level (hard guardrail)**
-The platform enforces independently of agent judgment:
-- **File watch rules** — files in `locked` zones cannot be written without an approval token in session context
-- **Commit gating** — pre-commit hooks parse gndctrl markers and reject commits touching `locked` zones without an approval record
-- **Session scoping** — agent container can be restricted to write access only within authorised zone directories
+The platform enforces independently of agent judgment, at the runtime that launches the agent.
+Enforced today on the reference deployment:
+- **Per-edit read-gate** — an agent cannot write a file in a governed zone before it has read that zone's `.gndctrl` (pre-tool hook; covers Claude Code)
+- **Locked-zone dispatch refusal** — a turn targeting a `locked` zone is refused before the agent runs; the change must go through human review. Applies to **every provider** (enforced at the harness dispatch point)
+- **Zone locking** — `.gndctrl.locks` holds a per-zone lock for the running turn so no second agent edits the same zone simultaneously (fleet mode: the lock table is fleet-wide)
 - **Fleet mode addition** — cross-airspace writes require the owning airspace to grant clearance; a foreign agent cannot write to another airspace's locked zone under any circumstances
+
+Planned (not yet enforced): commit-time gating (pre-commit / GitHub Action rejecting commits that touch a `locked` zone without an approval record) and filesystem-level session scoping (restricting an agent's write access to its authorised zone directories).
 
 **Violation report format:**
 ```

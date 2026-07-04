@@ -22,10 +22,11 @@ Think of it as **Air Traffic Control for your codebase.**
 |---|---|
 | Spec v0.1.0 | ✓ Complete |
 | Reference fleet implementation | ✓ Running in production |
-| CLI (`init` · `audit` · `preflight` · `zones`) | ✓ Built — runs from source |
-| Runtime enforcement hook (PreToolUse read-gate) | ✓ Running in production |
-| GitHub Action | Planned |
-| Provider adapters | In progress (Claude done) |
+| CLI (`init` · `audit` · `preflight` · `zones` · `lock`) | ✓ Built — runs from source |
+| Per-edit read-gate hook (Claude Code) | ✓ Running in production |
+| Dispatch gate + zone locks — all agents (Claude / Codex / Kilo) | ✓ Running in production (pChisel) |
+| Commit-time gating (GitHub Action / pre-commit) | Planned |
+| Provider adapters | Claude / Codex / Kilo contract-governed; per-edit hook is Claude-only |
 | Published packages (PyPI / npm / curl) | Planned |
 | Hosted platform (gndctrl.dev) | Planned |
 
