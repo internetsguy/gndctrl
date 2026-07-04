@@ -3,18 +3,24 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 
+# deprecated < experimental < active < stable < sensitive < locked — for the gate resolver below.
+_STABILITY_RANK = {"deprecated": 0, "experimental": 1, "active": 2, "stable": 3, "sensitive": 4, "locked": 5}
+
+
 def zone_for_path(doc, relpath):
-    """Return the id of the first zone whose `paths[]` patterns match `relpath`, else None.
+    """Return the id of the zone whose `paths[]` patterns match `relpath`, else None.
 
     `paths[]` entries are glob patterns (e.g. "backend/routes/*.py", "src/billing/*"). A path
     matches if it fnmatches the pattern, equals it, or falls under a directory-style pattern
-    (pattern treated as a prefix: "src/billing" matches "src/billing/webhook.py"). First match
-    wins in zone-declaration order — deterministic and enough for lock resolution; inline
-    @gndctrl:zone markers (which can override path patterns per file) are not consulted here.
+    (pattern treated as a prefix: "src/billing" matches "src/billing/webhook.py"). When a file
+    matches MORE THAN ONE zone, the **most restrictive** (highest stability) wins — so a locked
+    file covered by a broad catch-all still resolves to the locked zone. Inline @gndctrl:zone
+    markers (which can override path patterns per file) are not consulted here.
     """
     rel = str(relpath).strip().lstrip("./")
     if not rel:
         return None
+    best, best_rank = None, -1
     for zid, zone in getattr(doc, "zones", {}).items():
         for pat in (getattr(zone, "paths", None) or []):
             pat = str(pat).strip().lstrip("./")
@@ -23,8 +29,11 @@ def zone_for_path(doc, relpath):
             if (rel == pat
                     or fnmatch.fnmatch(rel, pat)
                     or fnmatch.fnmatch(rel, pat.rstrip("/") + "/*")):
-                return zid
-    return None
+                rank = _STABILITY_RANK.get(getattr(zone, "stability", None), 2)
+                if rank > best_rank:
+                    best, best_rank = zid, rank
+                break
+    return best
 
 
 # ── Inline marker objects (from scanning source files) ────────────────────────
