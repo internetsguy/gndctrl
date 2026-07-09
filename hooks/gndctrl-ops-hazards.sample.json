@@ -1,0 +1,26 @@
+{
+  "_comment": "SAMPLE gndctrl ops-hazard registry. Copy to ~/.claude/gndctrl-ops-hazards.json (or point GNDCTRL_OPS_HAZARDS at it) and replace with YOUR platform's genuinely dangerous commands. The ops-gate hook reads this file — never edit the hook. `pattern` is a Python regex matched against the full command string; `doc` is the governing document that must be Read in the session before the command is allowed. Gate the RAW dangerous command, not a safe wrapper.",
+  "hazards": [
+    {
+      "id": "example-restart-core-service",
+      "pattern": "docker\\s+(stop|restart|kill|rm)\\b[^|;&]*\\b(my-app|my-proxy)\\b",
+      "doc": "/path/to/your-project.gndctrl",
+      "severity": "outage",
+      "reason": "Restarting the core app or proxy takes the whole platform down. Use the health-checked deploy wrapper instead of a raw docker restart."
+    },
+    {
+      "id": "example-authoritative-dns-reload",
+      "pattern": "\\brndc\\b|systemctl\\s+(restart|reload)\\s+named",
+      "doc": "/path/to/ops-laws.md",
+      "severity": "catastrophic",
+      "reason": "A shared authoritative DNS server serves every tenant — a bad reload downs all of them. Read the DNS runbook and confirm reversibility first."
+    },
+    {
+      "id": "example-destructive-recreate",
+      "pattern": "deploy\\.sh\\b[^|;&]*--recreate|docker\\s+compose\\s+down\\b",
+      "doc": "/path/to/infra.gndctrl",
+      "severity": "destructive",
+      "reason": "This recreates/destroys containers and loses in-container state. Confirm the target and that state is disposable before running."
+    }
+  ]
+}
