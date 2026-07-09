@@ -1,10 +1,10 @@
-# chisel.master.gndctrl
+# Example fleet master document (master.gndctrl)
 # Tier 1 — Platform-wide master control document
 # gndctrl_spec: "0.1.0"
 # READ ONLY for project-level agents. Never modified by container agents.
 # Cache-stable layout: volatile content lives at the bottom of this file.
 # The fleet-wide zone lock table lives in .gndctrl.locks at the fleet root.
-# Served at: GET http://pchisel-app:8000/api/pchisel/master
+# Served at (example): GET https://<your-platform-host>/api/fleet/master
 
 meta:
   platform: pChisel
@@ -84,7 +84,7 @@ conventions:
     project_doc: "/workspace/[name].gndctrl"
     logbook: "/workspace/logbook/"
     user_notes: "/workspace/project.md — freeform user context"
-    dev_server_start: "/workspace/.pchisel-start — auto-start script"
+    dev_server_start: "/workspace/.dev-start — dev-server auto-start script"
 
 # ── Approved Tool Registry ────────────────────────────────────────────────────
 
@@ -121,12 +121,12 @@ ai_providers:
   - id: claude
     name: Claude Code (Anthropic)
     weight_class: heavy   # Sonnet default; Opus = super
-    contract_path: /home/chisel/.claude/CLAUDE.md
+    contract_path: ~/.claude/CLAUDE.md
     status: active
   - id: gemini
     name: Google Gemini CLI
     weight_class: medium
-    contract_path: /home/chisel/.gemini/GEMINI.md
+    contract_path: ~/.gemini/GEMINI.md
     status: planned
   - id: codex
     name: OpenAI Codex
@@ -144,7 +144,7 @@ ai_providers:
 preflight:
   token_budget: "<4,000 tokens total"
   steps:
-    1: "[fleet] Load master — curl -s http://pchisel-app:8000/api/pchisel/master | head -200 (~500 tokens)"
+    1: "[fleet] Load master — curl -s https://<your-platform-host>/api/fleet/master | head -200 (~500 tokens)"
     2: "Load project doc — read /workspace/*.gndctrl — zone registry, architecture, gotchas (~1,000 tokens)"
     3: "Resolve deps — for each task-relevant zone, trace deps[]; load full docs for sensitive/locked zones; load relevant logbook entries by CRID (cold memory)"
     4: "Validate weight class — check minimum_agent_class on each relevant zone; deny entry if insufficient"
@@ -157,7 +157,7 @@ preflight:
 known_solutions: []
   # Format:
   # - pattern_id: PATTERN_001
-  #   contributed_by: "airspace=CHI, project=pchisel-app"
+  #   contributed_by: "airspace=CHI, project=api-server"
   #   date: "YYYY-MM-DD"
   #   problem: "Short description"
   #   solution: |

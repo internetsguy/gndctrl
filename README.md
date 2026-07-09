@@ -16,7 +16,7 @@ Think of it as **Air Traffic Control for your codebase.**
 
 ## Status
 
-**Private / Pre-release.** Currently battle-testing inside [pChisel](https://github.com/internetsguy/pChisel) as the reference fleet mode implementation.
+**Pre-release.** Battle-tested and hardened inside **pChisel** — a production multi-tenant AI dev platform — as the reference fleet-mode implementation.
 
 | Phase | Status |
 |---|---|

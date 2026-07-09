@@ -768,9 +768,9 @@ All code is visible but not open source (BSL or SSPL licence). Commercial use re
 
 ---
 
-## Relationship to Chisel
+## Relationship to pChisel
 
-gndctrl originates from the pChisel context management system built inside Chisel (a personal AI dev platform). Chisel is a fleet mode environment by nature — multiple containerised projects, parallel agents, a master control layer. This makes it the ideal battle-testing ground for gndctrl's fleet mode before any public release.
+gndctrl originates from the context-management system built inside **pChisel** (a multi-tenant AI dev platform). pChisel is a fleet-mode environment by nature — multiple containerised projects, parallel agents, a master control layer. This makes it the ideal battle-testing ground for gndctrl's fleet mode before any public release.
 
 **Current implementation state (as of 2026-03-24):**
 - `chisel.master.gndctrl` — master fleet document; served to agents at container boot via `GET /api/pchisel/master`

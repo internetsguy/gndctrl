@@ -15,16 +15,16 @@ path each agent reads:
 |---|---|---|
 | OpenAI Codex CLI (ChatGPT) | `<project>/AGENTS.md` | **Native convention** — `AGENTS.md` support is built into the CLI. |
 | Kilo CLI | `<project>/AGENTS.md` | Reads `AGENTS.md` natively (verified against the shipped binaries). |
-| Claude Code | `~/.claude/CLAUDE.md` or `<project>/CLAUDE.md` | Also supports **hard enforcement** via a PreToolUse hook that denies edits until the `.gndctrl` is read — see the pChisel reference hooks (`gndctrl-preflight.py`, `gndctrl-session.py`). |
+| Claude Code | `~/.claude/CLAUDE.md` or `<project>/CLAUDE.md` | Also supports **hard enforcement** via PreToolUse hooks: an edit-gate that denies edits until the `.gndctrl` is read, and an ops-action gate that denies dangerous commands until their hazard doc is read. Both ship in [`hooks/`](../hooks/). |
 | Gemini CLI | `~/.gemini/GEMINI.md` or `<project>/GEMINI.md` | |
 | GitHub Copilot | `<project>/.github/copilot-instructions.md` | |
 | Qwen Code | `<project>/QWEN.md` (also honors `AGENTS.md` in recent versions) | |
 | Anything else | Its system-prompt / rules file | The contract is plain markdown — paste it wherever the agent takes standing instructions. |
 
 One source file, many install paths — a deployment script should `cp` from
-`docs/contracts/<mode>-mode-contract.md` to each path (see the pChisel reference deployment:
-`chisel-base/entrypoint.sh` seeds four paths per container from one file, and verifies with a
-single md5 across all copies).
+`docs/contracts/<mode>-mode-contract.md` to each path. (In the pChisel reference deployment, the
+container entrypoint seeds four paths per container from one file and verifies with a single md5
+across all copies.)
 
 ## Enforcement levels
 
