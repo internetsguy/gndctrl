@@ -1,8 +1,10 @@
-# Air Traffic Control — gndctrl enforcement hooks
+# Air Traffic Control — gndctrl's read-before-act clearance gates
 
-**Air Traffic Control (ATC)** is the enforcement layer of gndctrl: mechanical guardrails
-so "read the governing document before you act" stops being prose nobody follows and
-becomes a tripwire that self-corrects.
+**Air Traffic Control (ATC)** is gndctrl's clearance layer: the pieces that require an
+agent to get clearance — read the governing document — *before it acts*. It's one part of
+gndctrl's broader enforcement (which also includes the dispatch gate and zone locks), not
+the whole of it. ATC's job is narrow and mechanical: "read the governing document before
+you act" stops being prose nobody follows and becomes a tripwire that self-corrects.
 
 These are [Claude Code](https://claude.com/claude-code) `PreToolUse` hooks. They deny a
 tool call with a reason; the agent reads the named document, then retries. The user is

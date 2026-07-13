@@ -25,7 +25,7 @@ Think of it as **Air Traffic Control for your codebase.**
 | Reference fleet implementation | ✓ Running in production |
 | CLI (`init` · `audit` · `preflight` · `zones` · `lock`) | ✓ Built — runs from source |
 | **Air Traffic Control** — edit gate + ops gate (Claude Code hooks) | ✓ Shipped — `hooks/`, installed by `install.sh` |
-| Dispatch gate + zone locks — all agents (Claude / Codex / Kilo) | ✓ Running in production (pChisel) |
+| Dispatch gate + zone locks — all agents (Claude / Codex / Kilo) | ✓ Running in production (pyChisel) |
 | Commit-time gating (GitHub Action / pre-commit) | Planned |
 | Provider adapters | Claude / Codex / Kilo contract-governed; ATC hooks are Claude-only |
 | `curl \| bash` installer (CLI + ATC hooks) | ✓ `install.sh` |
