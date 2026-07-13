@@ -2,7 +2,7 @@
 
 **Ground Control for your codebase — zone-based stability annotations that any AI agent understands, enforced at runtime, from a single project to a full dev platform.**
 
-I started this project initially to just stop my agents from drifting and wasting tokens but it's evolved into much more than that now and I've been using it to create tools that have some serious structure much faster than if I wasn't using it. I'm sure there's other things like it out there now but this is my take on overcoming an issue I found and I'm really happy to get feedback about whether it helps anyone out and if there's anything huge I missed
+This project was started initially just to stop agents from drifting and wasting tokens but it's evolved into much more than that now and I've been using it to create tools that have some serious structure much faster than if I wasn't using it. I'm sure there's other things like it out there now but this is my take on overcoming an issue I found and I'm really happy to get feedback about whether it helps anyone out and if there's anything huge I missed
 ---
 
 ## What It Is
