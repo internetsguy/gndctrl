@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
 """
-gndctrl ops-action gate (PreToolUse: Bash).
+gndctrl Air Traffic Control — ops gate (PreToolUse: Bash).
 
-The preflight tripwire gates EDITS to governed files. But the actions that take a
-platform DOWN are COMMANDS — a service restart, a DNS reload, a container recreate.
-Those are otherwise ungated: an agent can run a documented-dangerous command with a
-cross-zone side effect and never read the hazard. (Seen in the wild: a routine
-service-restart command changed a core container's internal IP and locked every
-tenant out — the hazard was documented in the right zone, but *running the command*
-surfaced nothing, because edits are gated and commands are not. This closes that gap.)
+The edit gate (`atc-edit-gate.py`) clears EDITS to governed files. But the actions
+that take a platform DOWN are COMMANDS — a service restart, a DNS reload, a container
+recreate. Those are otherwise ungated: an agent can run a documented-dangerous command
+with a cross-zone side effect and never read the hazard. (Seen in the wild: a routine
+service-restart command changed a core container's internal IP and locked every tenant
+out — the hazard was documented in the right zone, but *running the command* surfaced
+nothing, because edits are gated and commands are not. This closes that gap.)
 
 This hook makes ops hazards mechanical, mirroring the edit gate: when a Bash command
 matches a governed hazard, it DENIES until the governing document has been Read this
 session. The agent reads the hazard, understands the blast radius + recovery, then
-retries. The user is never prompted.
+retries. The user is never prompted. Together the two gates are Air Traffic Control:
+edits and commands, both cleared before takeoff.
 
 DATA-DRIVEN — the hook has NO platform-specific rules. It reads a hazard registry
-(GNDCTRL_OPS_HAZARDS env, else ~/.claude/gndctrl-ops-hazards.json). Each hazard:
+(ATC_OPS_HAZARDS env, else ~/.claude/atc-ops-hazards.json). Each hazard:
     {"id","pattern"(regex on the command),"doc"(file to read),"severity","reason"}
 Add/adjust hazards by editing that file — never this code. That's what makes the
 gate portable to any platform installing gndctrl.
@@ -25,7 +26,7 @@ Fail-OPEN on any internal error (never brick the shell because of a hook bug).
 Fail-CLOSED only on the deterministic "this command is a known hazard and you have
 not read its doc this session."
 
-Disable: set GNDCTRL_OPS_GATE_OFF=1, or remove the Bash PreToolUse entry from
+Disable: set ATC_OPS_GATE_OFF=1, or remove the Bash PreToolUse entry from
 ~/.claude/settings.json.
 """
 import sys, os, json, re, glob
@@ -47,10 +48,10 @@ def deny(reason: str):
 
 
 def _registry_paths():
-    env = os.environ.get("GNDCTRL_OPS_HAZARDS")
+    env = os.environ.get("ATC_OPS_HAZARDS")
     if env:
         yield env
-    yield os.path.expanduser("~/.claude/gndctrl-ops-hazards.json")
+    yield os.path.expanduser("~/.claude/atc-ops-hazards.json")
 
 
 def _load_hazards():
@@ -66,7 +67,7 @@ def _load_hazards():
 
 def _doc_read_this_session(transcript_path: str, doc: str) -> bool:
     """True if the transcript shows a Read tool call touching `doc` (by abs path or
-    basename) — same session-read heuristic as the edit preflight."""
+    basename) — same session-read heuristic as the edit gate."""
     if not transcript_path or not os.path.exists(transcript_path):
         return True  # can't verify → fail open (don't block on missing transcript)
     doc_abs = os.path.abspath(doc)
@@ -86,7 +87,7 @@ def _doc_read_this_session(transcript_path: str, doc: str) -> bool:
 
 
 def main():
-    if os.environ.get("GNDCTRL_OPS_GATE_OFF") == "1":
+    if os.environ.get("ATC_OPS_GATE_OFF") == "1":
         allow()
     try:
         data = json.load(sys.stdin)
@@ -118,15 +119,14 @@ def main():
         sev = hz.get("severity", "high")
         reason = hz.get("reason", "")
         deny(
-            f"⛔ gndctrl ops-gate — this command is a governed hazard (severity: {sev}).\n"
-            f"Before running it, read the governing document so you know the blast radius "
-            f"and recovery:\n    {doc}\n"
+            f"⛔ gndctrl Air Traffic Control — ops command not cleared (severity: {sev}).\n"
+            f"This command is a governed hazard. Before running it, read the governing "
+            f"document so you know the blast radius and recovery:\n    {doc}\n"
             + (f"\n{reason}\n" if reason else "")
             + "\nGrep/Read the relevant zone (not the whole file), then retry the command. "
-            "This gate exists because the most dangerous actions on this platform are "
-            "commands, not edits — and a documented hazard is worthless if nobody reads it "
-            "before acting. (Override for one command only if you're certain: "
-            "GNDCTRL_OPS_GATE_OFF=1.)"
+            "This gate exists because the most dangerous actions on a platform are commands, "
+            "not edits — and a documented hazard is worthless if nobody reads it before "
+            "acting. (Override for one command only if you're certain: ATC_OPS_GATE_OFF=1.)"
         )
     allow()
 

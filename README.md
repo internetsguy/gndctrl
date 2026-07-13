@@ -24,11 +24,12 @@ Think of it as **Air Traffic Control for your codebase.**
 | Spec v0.1.0 | ✓ Complete |
 | Reference fleet implementation | ✓ Running in production |
 | CLI (`init` · `audit` · `preflight` · `zones` · `lock`) | ✓ Built — runs from source |
-| Per-edit read-gate hook (Claude Code) | ✓ Running in production |
+| **Air Traffic Control** — edit gate + ops gate (Claude Code hooks) | ✓ Shipped — `hooks/`, installed by `install.sh` |
 | Dispatch gate + zone locks — all agents (Claude / Codex / Kilo) | ✓ Running in production (pChisel) |
 | Commit-time gating (GitHub Action / pre-commit) | Planned |
-| Provider adapters | Claude / Codex / Kilo contract-governed; per-edit hook is Claude-only |
-| Published packages (PyPI / npm / curl) | Planned |
+| Provider adapters | Claude / Codex / Kilo contract-governed; ATC hooks are Claude-only |
+| `curl \| bash` installer (CLI + ATC hooks) | ✓ `install.sh` |
+| Published packages (PyPI / npm) + `gndctrl.dev` vanity URL | Planned |
 | Hosted platform (gndctrl.dev) | Planned |
 
 ---
@@ -41,6 +42,7 @@ gndctrl/
 ├── src/gndctrl/        # The CLI package — parser, schema validator, auditor, preflight resolver
 ├── docs/               # how-it-works.md — the mechanism + why it beats a plain prompt file
 ├── cli/                # legacy entry stub (superseded by src/gndctrl)
+├── hooks/              # Air Traffic Control — the PreToolUse enforcement hooks (edit gate + ops gate)
 ├── adapters/           # Provider-specific agent contract templates
 │   ├── claude/         # Claude Code + Claude API contracts (done)
 │   ├── gemini/         # Gemini CLI adapter (planned)
@@ -83,12 +85,48 @@ In both modes, runtime zone-lock state lives in a machine-managed `.gndctrl.lock
 
 ---
 
+## Air Traffic Control — mechanical enforcement
+
+Zone markers are only advice until something *makes* an agent read them. **Air Traffic
+Control (ATC)** is that something: two [Claude Code](https://claude.com/claude-code)
+`PreToolUse` hooks (in [`hooks/`](hooks/)) that deny a tool call until the governing
+`.gndctrl` has actually been read in the current session. The agent reads the zone, then
+retries — the user is never prompted. This is what turns "read the governing document
+before you act" from prose nobody follows into a tripwire that self-corrects.
+
+| Gate | Hook | Denies until the governing doc is read, for… |
+|---|---|---|
+| **Edit gate** | [`hooks/atc-edit-gate.py`](hooks/atc-edit-gate.py) | any `Edit`/`Write`/`NotebookEdit` to a file inside a gndctrl-governed project |
+| **Ops gate** | [`hooks/atc-ops-gate.py`](hooks/atc-ops-gate.py) | any `Bash` command matching a governed **ops hazard** (a service restart, DNS reload, destructive recreate) |
+
+The edit gate is **zero-config** — it reads the `*.gndctrl` files already in your repos.
+The ops gate is **data-driven** — you list your platform's dangerous commands in
+`~/.claude/atc-ops-hazards.json` and never touch the hook. Both **fail open** on any
+internal error (a hook bug must never brick your session) and **fail closed** only on the
+deterministic "you didn't read it" case. Per-command escape hatches: `ATC_EDIT_GATE_OFF=1`,
+`ATC_OPS_GATE_OFF=1`. Full details in **[hooks/README.md](hooks/README.md)**.
+
+---
+
 ## Install & use
 
-The CLI works today, installed from source:
+One command installs the CLI **and** wires Air Traffic Control into `~/.claude/settings.json`
+(idempotent — it preserves any existing config):
 
 ```bash
-pip install -e .          # from the repo root
+curl -fsSL https://raw.githubusercontent.com/internetsguy/gndctrl/master/install.sh | bash
+```
+
+Or from a clone:
+
+```bash
+pip install -e .          # from the repo root — the CLI
+./install.sh              # CLI + Air Traffic Control hooks
+```
+
+Then, in any project:
+
+```bash
 gndctrl init              # scaffold .gndctrl + logbook/ (auto-detects single vs fleet)
 gndctrl audit             # validate markers, CRIDs, dependency integrity (exit 1 on errors)
 gndctrl audit --format json   # CI-friendly output
@@ -96,7 +134,7 @@ gndctrl preflight --zones PAYMENT --agent-class heavy   # resolve deps + clearan
 gndctrl zones             # list zones
 ```
 
-Published installers are planned but not yet live:
+Published package managers + a vanity install URL are planned but not yet live:
 
 ```bash
 # planned — not available yet

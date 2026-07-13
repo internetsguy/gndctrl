@@ -1,5 +1,5 @@
 {
-  "_comment": "SAMPLE gndctrl ops-hazard registry. Copy to ~/.claude/gndctrl-ops-hazards.json (or point GNDCTRL_OPS_HAZARDS at it) and replace with YOUR platform's genuinely dangerous commands. The ops-gate hook reads this file — never edit the hook. `pattern` is a Python regex matched against the full command string; `doc` is the governing document that must be Read in the session before the command is allowed. Gate the RAW dangerous command, not a safe wrapper.",
+  "_comment": "SAMPLE Air Traffic Control ops-hazard registry. Copy to ~/.claude/atc-ops-hazards.json (or point ATC_OPS_HAZARDS at it) and replace with YOUR platform's genuinely dangerous commands. The atc-ops-gate hook reads this file — never edit the hook. `pattern` is a Python regex matched against the full command string; `doc` is the governing document that must be Read in the session before the command is allowed. Gate the RAW dangerous command, not a safe wrapper.",
   "hazards": [
     {
       "id": "example-restart-core-service",

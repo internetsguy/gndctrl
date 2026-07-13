@@ -1,48 +1,53 @@
-# gndctrl hooks — Claude Code integration
+# Air Traffic Control — gndctrl enforcement hooks
 
-Mechanical enforcement of gndctrl governance, so "read the governing document before
-you act" stops being prose nobody follows and becomes a tripwire that self-corrects.
+**Air Traffic Control (ATC)** is the enforcement layer of gndctrl: mechanical guardrails
+so "read the governing document before you act" stops being prose nobody follows and
+becomes a tripwire that self-corrects.
 
 These are [Claude Code](https://claude.com/claude-code) `PreToolUse` hooks. They deny a
 tool call with a reason; the agent reads the named document, then retries. The user is
-never prompted.
+never prompted. There are two gates — edits and commands, both cleared before takeoff:
 
-## The ops-action gate (`gndctrl-ops-gate.py`)
+| Gate | File | Denies until you've read the governing doc, for… |
+|---|---|---|
+| **Edit gate** | `atc-edit-gate.py` | any `Edit`/`Write`/`NotebookEdit` to a file inside a gndctrl-governed project |
+| **Ops gate** | `atc-ops-gate.py` | any `Bash` command matching a governed **ops hazard** |
 
-gndctrl's edit-preflight gates **edits** to governed files. But the actions that take a
-platform *down* are **commands** — a service restart, a DNS reload, a container recreate.
-Those are otherwise ungated. This hook closes that gap: when a Bash command matches a
-governed **ops hazard**, it blocks until the hazard's governing document has been read in
-the current session.
+`install.sh` installs and wires both gates automatically. The sections below document
+what each does and how to configure it; you only touch this by hand if you want to
+customize.
+
+---
+
+## The edit gate (`atc-edit-gate.py`)
+
+The headline enforcement. It walks up from the file being edited to the nearest ancestor
+holding a `*.gndctrl` document; if that project's `.gndctrl` has **not** been Read in the
+current session, the edit is denied with a pointer to the governing doc. Reading the
+`.gndctrl` (even a targeted, partial Read of the relevant zone) clears the gate.
+
+- **Zero config** — it's data-driven off the `*.gndctrl` files already in your repos.
+  No per-platform rules, no registry.
+- **Fail-open** on any internal error or unverifiable transcript — a hook bug must never
+  brick editing. **Fail-closed** only on the deterministic "you didn't read it" case.
+- **Editing a `.gndctrl` file itself is always allowed** (you're maintaining it).
+- **Escape hatch:** `ATC_EDIT_GATE_OFF=1` disables the gate for a command you're sure of.
+
+## The ops gate (`atc-ops-gate.py`)
+
+The edit gate clears **edits**; but the actions that take a platform *down* are
+**commands** — a service restart, a DNS reload, a container recreate. Those are otherwise
+ungated. This hook closes that gap: when a Bash command matches a governed **ops hazard**,
+it blocks until the hazard's governing document has been read in the current session.
 
 It is **data-driven** — the hook contains no platform-specific rules. It reads a hazard
 registry; you describe your platform's dangerous commands there and never touch the hook.
 
-### Install
-
-1. Copy the hook somewhere stable (e.g. `~/.claude/hooks/gndctrl-ops-gate.py`).
-2. Copy `gndctrl-ops-hazards.sample.json` to `~/.claude/gndctrl-ops-hazards.json` and
-   replace the examples with your own hazards (or point `GNDCTRL_OPS_HAZARDS` at any path).
-3. Register it in `~/.claude/settings.json`:
-
-   ```json
-   {
-     "hooks": {
-       "PreToolUse": [
-         {
-           "matcher": "Bash",
-           "hooks": [
-             { "type": "command", "command": "python3 ~/.claude/hooks/gndctrl-ops-gate.py" }
-           ]
-         }
-       ]
-     }
-   }
-   ```
-
 ### Hazard registry
 
-Each hazard entry:
+`install.sh` seeds `~/.claude/atc-ops-hazards.json` from `atc-ops-hazards.sample.json`.
+Edit that file (or point `ATC_OPS_HAZARDS` at any path) and replace the examples with your
+own hazards. Each entry:
 
 | field | meaning |
 |---|---|
@@ -56,16 +61,49 @@ Guidance: gate the **raw dangerous command**, not a safe wrapper (gate `docker r
 core-app`, not the health-checked deploy script that supersedes it). Point `doc` at the
 zone that actually documents the hazard, so reading it teaches the recovery.
 
-### Behaviour
-
 - **Fail-open** on any internal error, a missing/malformed registry, or an unverifiable
-  transcript — a hook bug must never brick the shell.
-- **Fail-closed** only on the deterministic case: the command matches a hazard *and* its
-  doc has not been read this session.
-- **Escape hatch:** `GNDCTRL_OPS_GATE_OFF=1` disables the gate for a command you're sure of.
+  transcript. **Fail-closed** only on the deterministic case: the command matches a hazard
+  *and* its doc has not been read this session.
+- **Escape hatch:** `ATC_OPS_GATE_OFF=1` disables the gate for a command you're sure of.
 
-## The edit preflight (`gndctrl-preflight.py`)
+---
 
-The companion hook (see the main gndctrl docs) gates **edits** to any file inside a
-gndctrl-governed project until that project's `*.gndctrl` document has been read. The
-ops-gate is its operational sibling: edits and commands, both governed.
+## Install
+
+The recommended path is the repo installer, which copies both hooks, seeds the hazard
+registry, and merges the `PreToolUse` entries into `~/.claude/settings.json` idempotently:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/internetsguy/gndctrl/master/install.sh | bash
+```
+
+### Manual install
+
+If you'd rather wire it yourself:
+
+1. Copy the hooks somewhere stable, e.g. `~/.claude/hooks/atc-edit-gate.py` and
+   `~/.claude/hooks/atc-ops-gate.py`.
+2. (Ops gate only) copy `atc-ops-hazards.sample.json` to `~/.claude/atc-ops-hazards.json`
+   and replace the examples with your own hazards.
+3. Register both in `~/.claude/settings.json`:
+
+   ```json
+   {
+     "hooks": {
+       "PreToolUse": [
+         {
+           "matcher": "Edit|Write|NotebookEdit",
+           "hooks": [
+             { "type": "command", "command": "python3 ~/.claude/hooks/atc-edit-gate.py" }
+           ]
+         },
+         {
+           "matcher": "Bash",
+           "hooks": [
+             { "type": "command", "command": "python3 ~/.claude/hooks/atc-ops-gate.py" }
+           ]
+         }
+       ]
+     }
+   }
+   ```
