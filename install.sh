@@ -71,10 +71,21 @@ fetch() {  # fetch <remote-path> <local-dest>
     fi
 }
 
-fetch "hooks/atc-edit-gate.py" "${HOOK_DIR}/atc-edit-gate.py"
-fetch "hooks/atc-ops-gate.py"  "${HOOK_DIR}/atc-ops-gate.py"
-chmod +x "${HOOK_DIR}/atc-edit-gate.py" "${HOOK_DIR}/atc-ops-gate.py"
-dim "  Hooks → ${HOOK_DIR}/atc-{edit,ops}-gate.py ✓"
+fetch "hooks/atc-edit-gate.py"      "${HOOK_DIR}/atc-edit-gate.py"
+fetch "hooks/atc-ops-gate.py"       "${HOOK_DIR}/atc-ops-gate.py"
+fetch "hooks/atc-session-start.py"  "${HOOK_DIR}/atc-session-start.py"
+chmod +x "${HOOK_DIR}/atc-edit-gate.py" "${HOOK_DIR}/atc-ops-gate.py" "${HOOK_DIR}/atc-session-start.py"
+dim "  Hooks → ${HOOK_DIR}/atc-{edit,ops}-gate.py + atc-session-start.py ✓"
+
+# PyYAML enables zone-level enforcement in the edit gate (locked zones, class floors,
+# zone locks). Without it the gate degrades gracefully to doc-read gating only.
+if python3 -c "import yaml" 2>/dev/null; then
+    dim "  PyYAML present — zone-level enforcement active ✓"
+else
+    python3 -m pip install --quiet pyyaml 2>/dev/null \
+        && dim "  PyYAML installed — zone-level enforcement active ✓" \
+        || dim "  PyYAML unavailable — edit gate degrades to doc-read gating (pip install pyyaml to upgrade)"
+fi
 
 # Seed the ops-hazard registry only if the user doesn't already have one.
 HAZARDS="${CLAUDE_DIR}/atc-ops-hazards.json"
@@ -126,6 +137,19 @@ if not present("atc-ops-gate.py"):
     add("Bash", "python3 ~/.claude/hooks/atc-ops-gate.py")
     added.append("ops gate")
 
+sess = cfg["hooks"].setdefault("SessionStart", [])
+if not isinstance(sess, list):
+    cfg["hooks"]["SessionStart"] = sess = []
+def sess_present(basename):
+    for entry in sess:
+        for h in (entry.get("hooks") or []):
+            if basename in (h.get("command") or ""):
+                return True
+    return False
+if not sess_present("atc-session-start.py"):
+    sess.append({"hooks": [{"type": "command", "command": "python3 ~/.claude/hooks/atc-session-start.py"}]})
+    added.append("session-start injector")
+
 if added:
     with open(p, "w") as f:
         json.dump(cfg, f, indent=2)
@@ -138,8 +162,10 @@ echo ""
 green "  ✓ gndctrl + Air Traffic Control installed"
 echo ""
 echo "  Enforcement is now live in new Claude Code sessions:"
-echo "    • edit gate — blocks edits to a governed project until its .gndctrl is read"
+echo "    • edit gate — zone-aware: locked zones deny always, zone locks respected,"
+echo "                  class floors enforced (GNDCTRL_AGENT_CLASS), doc-read required"
 echo "    • ops gate  — blocks a hazardous command until its governing doc is read"
+echo "    • session-start — announces governed projects + the pre-flight rule at open"
 echo "    Tune hazards in ~/.claude/atc-ops-hazards.json"
 echo ""
 echo "  Quick start:"

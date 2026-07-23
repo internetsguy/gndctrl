@@ -1,0 +1,136 @@
+# example-real-world.gndctrl
+# gndctrl example — what a MATURE project document looks like after months of use.
+# This is a fictional project (a small SaaS bookmarking app) but the structure is
+# taken from a production registry with 34 zones: gotchas written as numbered
+# invariants, decisions linked to CRIDs, per-path annotations, and all five
+# stability tiers doing real work. Compare with the `gndctrl init` template to see
+# the distance between scaffold and destination.
+# gndctrl_spec: "0.1.0"
+
+airspace: BMK
+version: "0.1.0"
+
+meta:
+  project: bookmarklet
+  description: "Multi-user bookmarking SaaS. FastAPI backend, vanilla JS frontend, SQLite."
+  language: python
+  framework: fastapi
+  database: "sqlite (/data/bookmarklet.db)"
+
+architecture:
+  overview: |
+    FastAPI backend serving a vanilla JS/HTML frontend. Session-cookie auth
+    (bmk_session, HttpOnly, SameSite=lax); tokens validated by middleware on all
+    /api/ routes except /api/auth/*. Stripe handles billing via webhooks.
+  entry_points:
+    - backend/main.py          # FastAPI app, mounts routers, auth middleware
+    - frontend/app.html        # Main UI
+
+# ── Zone Registry ─────────────────────────────────────────────────────────────
+# Zones defined by file path patterns. Inline @gndctrl:zone markers only where a
+# single file spans multiple zones.
+
+zones:
+  AUTH_CORE:
+    stability: sensitive
+    type: [code]
+    minimum_agent_class: heavy
+    deps: []
+    paths:
+      - "backend/routes/auth.py"
+      - "backend/sessions.py"                          # session mint/verify/revoke
+      - "backend/migrations/m004_password_reset.py"    # password_reset_token/_expires_at
+    description: "Authentication, session tokens, password reset. The zone where a subtle bug is an account takeover."
+    gotchas:
+      - "POST /api/auth/forgot-password is NON-ENUMERATING — it ALWAYS returns {ok:true}, even when rate-limited or the email doesn't exist. Do not add any branch that reveals account existence (status, message, or timing). INV-AUTH-1."
+      - "POST /api/auth/reset-password is single-use (clears the token on consume), expiry-checked (~1h), and DELETES ALL the user's sessions on success — reset means global logout. It creates NO session; the user signs in fresh. Do not auto-login from reset. INV-AUTH-2."
+      - "_login_rate_store is module-level — running multiple uvicorn workers would silently halve rate-limit effectiveness. Read planning/WORKERS.md before any worker-count change. BMK-RATIONALE-002."
+    decisions:
+      - "Sessions are DB rows, not JWTs — revocation is a DELETE, no token-invalidation dance. BMK-AUTH-20260214-001."
+
+  BILLING:
+    stability: sensitive
+    type: [code]
+    minimum_agent_class: heavy
+    deps: [AUTH_CORE]
+    paths:
+      - "backend/routes/billing.py"
+      - "backend/stripe_webhooks.py"
+    description: "Stripe checkout, subscription state, webhook ingestion."
+    gotchas:
+      - "Webhook handler MUST stay idempotent — Stripe retries aggressively and a duplicate 'invoice.paid' must not grant a second credit. Dedup key is the Stripe event id, stored in webhook_events. INV-BIL-1."
+      - "Never trust plan state computed client-side; the only authority is the subscriptions table, updated ONLY by the webhook handler. INV-BIL-2."
+    decisions:
+      - "No proration on downgrades — downgrade applies at period end. Product decision 2026-04-02, revisit if churn data says otherwise. BMK-BIL-20260402-001."
+
+  BOOKMARK_API:
+    stability: active
+    type: [code]
+    deps: [AUTH_CORE]
+    paths:
+      - "backend/routes/bookmarks.py"
+      - "backend/tags.py"
+    description: "CRUD for bookmarks and tags. The main feature surface — most day-to-day work lands here."
+    gotchas:
+      - "Tag rename cascades through bookmark_tags in one transaction — keep it that way or a crash mid-rename orphans rows. INV-BMK-1."
+
+  FRONTEND_UI:
+    stability: active
+    type: [code]
+    deps: [BOOKMARK_API]
+    paths:
+      - "frontend/*"
+    description: "Vanilla JS UI. No framework by decision — see BMK-UI-20260220-001."
+
+  IMPORT_EXPERIMENTS:
+    stability: experimental
+    type: [code]
+    deps: [BOOKMARK_API]
+    paths:
+      - "backend/importers/*"
+    description: "In-progress importers (Pocket, Raindrop, browser HTML). Act freely; nothing depends on this yet."
+
+  DB_SCHEMA:
+    stability: stable
+    type: [code, data]
+    deps: []
+    paths:
+      - "backend/migrations/*"
+      - "backend/db.py"
+    description: "Migration chain and DB access layer. Append-only by convention."
+    gotchas:
+      - "Migrations are APPEND-ONLY — never edit a shipped migration, add a new one. The chain has run on customer data. INV-DB-1."
+
+  LEGAL_DOCS:
+    stability: locked
+    type: [docs]
+    minimum_agent_class: super
+    deps: []
+    paths:
+      - "frontend/legal/*"
+    description: "Terms of Service and Privacy Policy. LOCKED — every change is a business + legal decision, never a code-quality call."
+    gotchas:
+      - "HUMAN APPROVAL REQUIRED for any edit. Surface a diff, do not commit unprompted. INV-LEG-1."
+      - "ToS version is immutable once accepted; changes require a new version number + re-acceptance at next login. INV-LEG-2."
+
+  V1_SYNC:
+    stability: deprecated
+    type: [code]
+    deps: []
+    paths:
+      - "backend/sync_v1.py"
+    description: "Old polling sync, replaced by SSE. No new dependencies; migration path is backend/routes/events.py."
+
+decision_log:
+  - crid: BMK-AUTH-20260214-001
+    summary: "DB-row sessions over JWTs (revocation simplicity)"
+  - crid: BMK-BIL-20260402-001
+    summary: "No downgrade proration; applies at period end"
+  - crid: BMK-UI-20260220-001
+    summary: "Vanilla JS, no framework — app is 4 screens, framework cost exceeds benefit"
+
+known_solutions:
+  - "SQLite 'database is locked' under load → busy_timeout=5000 is set in db.py connect(); if you see it anyway, you added a long-lived write transaction. Fix the transaction, don't raise the timeout. BMK-DB-20260318-001."
+
+open_questions:
+  - "Full-text search: FTS5 vs external index — blocked on data size projections."
