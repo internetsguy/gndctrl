@@ -66,8 +66,11 @@ def _load_hazards():
 
 
 def _doc_read_this_session(transcript_path: str, doc: str) -> bool:
-    """True if the transcript shows a Read tool call touching `doc` (by abs path or
-    basename) — same session-read heuristic as the edit gate."""
+    """True iff the transcript holds a GENUINE Read tool_use whose file_path is `doc`
+    (abs path or basename match) — NOT a mere co-occurrence of 'Read' + the filename in
+    prose, injected context, or this gate's own prior deny message (the substring version
+    of this check false-satisfied after one denial, because the deny reason itself contains
+    the doc path). Same proof as the edit gate — keep the two in sync."""
     if not transcript_path or not os.path.exists(transcript_path):
         return True  # can't verify → fail open (don't block on missing transcript)
     doc_abs = os.path.abspath(doc)
@@ -75,12 +78,23 @@ def _doc_read_this_session(transcript_path: str, doc: str) -> bool:
     try:
         with open(transcript_path, errors="ignore") as f:
             for line in f:
-                if doc_base not in line:
+                if doc_base not in line or "Read" not in line:
                     continue
-                if '"Read"' not in line and "'Read'" not in line:
+                try:
+                    obj = json.loads(line)
+                except Exception:
                     continue
-                if doc_abs in line or doc_base in line:
-                    return True
+                msg = obj.get("message", obj) if isinstance(obj, dict) else {}
+                content = msg.get("content") if isinstance(msg, dict) else None
+                if not isinstance(content, list):
+                    continue
+                for b in content:
+                    if not (isinstance(b, dict) and b.get("type") == "tool_use"
+                            and b.get("name") == "Read"):
+                        continue
+                    fp2 = str((b.get("input") or {}).get("file_path", ""))
+                    if os.path.abspath(fp2) == doc_abs or os.path.basename(fp2) == doc_base:
+                        return True
     except Exception:
         return True  # fail open on transcript read error
     return False
