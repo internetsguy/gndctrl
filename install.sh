@@ -168,6 +168,8 @@ echo "    • ops gate  — blocks a hazardous command until its governing doc i
 echo "    • session-start — announces governed projects + the pre-flight rule at open"
 echo "    Tune hazards in ~/.claude/atc-ops-hazards.json"
 echo ""
+echo "  Agent-driven install? The runbook is docs/AGENT-SETUP.md (routed from AGENTS.md)."
+echo ""
 echo "  Quick start:"
 echo "    gndctrl init          # scaffold .gndctrl in current project"
 echo "    gndctrl audit         # validate all zone markers"

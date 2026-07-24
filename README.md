@@ -134,6 +134,13 @@ gndctrl preflight --zones PAYMENT --agent-class heavy   # resolve deps + clearan
 gndctrl zones             # list zones
 ```
 
+### Installing via an AI agent?
+
+If an agent is doing the install, point it at [`AGENTS.md`](AGENTS.md) — it routes to
+[`docs/AGENT-SETUP.md`](docs/AGENT-SETUP.md), a runbook where every phase gates on a
+VERIFY command. Setup is complete when the verifications pass and the agent has
+reported its zone map — not when the files exist.
+
 Published package managers + a vanity install URL are planned but not yet live:
 
 ```bash
