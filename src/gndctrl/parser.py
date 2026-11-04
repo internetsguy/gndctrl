@@ -1,6 +1,7 @@
 """
 Scan source files for @gndctrl:zone and @gndctrl:node markers.
 """
+import os
 import re
 from pathlib import Path
 
@@ -171,11 +172,33 @@ def scan_file(path: Path) -> list:
     return markers
 
 
+# A project's data stores, not its code. Pruned at the project top only (where photo libraries and upload folders
+# live) - a code folder such as backend/storage/ deeper down is still scanned.
+MEDIA_DIRS = frozenset({"data", "uploads", "media", "storage", "originals", "derivatives", "photos", "videos", "backups"})
+
+
+def project_files(root: Path) -> list:
+    """The project's own files, sorted.
+
+    Folders in SKIP_DIRS and dot-folders are pruned BEFORE descending, and MEDIA_DIRS at the project top. (rglob("*")
+    then filtering still visited every file under node_modules and every photo - on a 70,000-file project an audit took
+    minutes.) No outside tools: gndctrl stands on its own.
+    """
+    root = Path(root)
+    out = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        top = Path(dirpath) == root
+        dirnames[:] = [d for d in dirnames
+                       if d not in SKIP_DIRS and not d.startswith(".") and not (top and d in MEDIA_DIRS)]
+        out.extend(Path(dirpath) / fn for fn in filenames)
+    return sorted(out)
+
+
 def scan_directory(root: Path) -> list:
     """Recursively scan *root* for all gndctrl markers in source files."""
     all_markers: list = []
 
-    for path in sorted(root.rglob("*")):
+    for path in project_files(root):
         if not path.is_file():
             continue
         # Skip excluded directories

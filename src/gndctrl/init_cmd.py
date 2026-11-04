@@ -14,7 +14,8 @@ def _detect_language(root: Path) -> str:
     if (root / "Cargo.toml").exists():
         return "rust"
     if (root / "package.json").exists():
-        return "typescript" if any(root.rglob("*.ts")) else "javascript"
+        from .parser import project_files
+        return "typescript" if any(p.suffix == ".ts" for p in project_files(root)) else "javascript"
     if (root / "requirements.txt").exists() or (root / "pyproject.toml").exists():
         return "python"
     return "unknown"
